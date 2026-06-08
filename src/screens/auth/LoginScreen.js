@@ -1,0 +1,187 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import GradientButton from '../../components/GradientButton';
+import { COLORS, GRADIENTS } from '../../constants/colors';
+import { FONTS } from '../../constants/fonts';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  saveUserProfile,
+  auth,
+} from '../../utils/firebase';
+
+export default function LoginScreen({ navigation }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleAuth = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Missing info', 'Please enter your email and password.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (isSignUp) {
+        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await saveUserProfile(user.uid, {
+          email: email.trim(),
+          createdAt: new Date().toISOString(),
+          onboardingComplete: false,
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
+    } catch (error) {
+      Alert.alert('Oops', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
+      <SafeAreaView style={styles.safe}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.flex}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.header}>
+              <LinearGradient colors={GRADIENTS.primary} style={styles.iconCircle}>
+                <Text style={styles.iconEmoji}>💕</Text>
+              </LinearGradient>
+              <Text style={styles.title}>VowFinity</Text>
+              <Text style={styles.subtitle}>
+                {isSignUp ? 'Start your love story' : 'Welcome back, lovebird'}
+              </Text>
+            </View>
+
+            <View style={styles.form}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="you@email.com"
+                placeholderTextColor={COLORS.placeholder}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor={COLORS.placeholder}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+
+              <GradientButton
+                title={isSignUp ? 'Create Account' : 'Sign In'}
+                onPress={handleAuth}
+                loading={loading}
+                style={styles.button}
+              />
+
+              <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={styles.switchRow}>
+                <Text style={styles.switchText}>
+                  {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                  <Text style={styles.switchLink}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
+  );
+}
+
+const styles = StyleSheet.create({
+  gradient: { flex: 1 },
+  safe: { flex: 1 },
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 28,
+    paddingBottom: 40,
+    justifyContent: 'center',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  iconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  iconEmoji: { fontSize: 32 },
+  title: {
+    fontFamily: FONTS.display,
+    fontSize: 36,
+    color: COLORS.navy,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontFamily: FONTS.regular,
+    fontSize: 15,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+  },
+  form: { width: '100%' },
+  label: {
+    fontFamily: FONTS.medium,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  input: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    fontFamily: FONTS.regular,
+    fontSize: 16,
+    color: COLORS.textPrimary,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  button: { marginTop: 28 },
+  switchRow: { marginTop: 20, alignItems: 'center' },
+  switchText: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: COLORS.textMuted,
+  },
+  switchLink: {
+    fontFamily: FONTS.semiBold,
+    color: COLORS.pink,
+  },
+});
