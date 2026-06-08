@@ -9,6 +9,7 @@ import {
   serverTimestamp,
 } from './firebase';
 import { getPlayerSlot } from './dailyQuestion';
+import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 
 export const MIN_SENTENCE_LENGTH = 10;
 export const CREATOR_DISPLAY_RATING = 10;
@@ -78,6 +79,11 @@ export function subscribeToHes10Round(coupleId, roundId, callback, onError) {
     return () => {};
   }
 
+  if (isGuestCoupleId(coupleId)) {
+    callback(null);
+    return () => {};
+  }
+
   return onSnapshot(
     getHes10RoundRef(coupleId, roundId),
     (snap) => {
@@ -98,6 +104,11 @@ export function subscribeToHes10Round(coupleId, roundId, callback, onError) {
 
 export function subscribeToHes10History(coupleId, callback, onError) {
   if (!coupleId) {
+    return () => {};
+  }
+
+  if (isGuestCoupleId(coupleId)) {
+    callback([]);
     return () => {};
   }
 
@@ -158,6 +169,11 @@ export async function createHes10Round(
   members,
   { starter, sentenceSuffix, fullSentence }
 ) {
+  if (isGuestCoupleId(coupleId)) {
+    showGuestSignupPrompt();
+    return null;
+  }
+
   try {
     const suffix = normalizeSentenceSuffix(sentenceSuffix);
     if (suffix.length < MIN_SENTENCE_LENGTH) {

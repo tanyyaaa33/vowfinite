@@ -8,6 +8,7 @@ import {
   serverTimestamp,
 } from './firebase';
 import { getDateKey } from './points';
+import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 import { getPlayerSlot } from './dailyQuestion';
 
 export function getWhoMoreLikelyDocRef(coupleId, dateKey = getDateKey()) {
@@ -80,6 +81,11 @@ export function subscribeToWhoMoreLikely(coupleId, dateKey, callback, onError) {
     return () => {};
   }
 
+  if (isGuestCoupleId(coupleId)) {
+    callback(null);
+    return () => {};
+  }
+
   return onSnapshot(
     getWhoMoreLikelyDocRef(coupleId, dateKey),
     (snap) => {
@@ -104,6 +110,11 @@ export async function submitWhoMoreLikelyChoice(
   members,
   { question, choice }
 ) {
+  if (isGuestCoupleId(coupleId)) {
+    showGuestSignupPrompt();
+    return;
+  }
+
   try {
     const dateKey = getDateKey();
     const ref = getWhoMoreLikelyDocRef(coupleId, dateKey);

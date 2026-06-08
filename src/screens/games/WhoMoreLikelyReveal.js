@@ -21,7 +21,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import AvatarCircle from '../../components/AvatarCircle';
 import ConfettiBurst from '../../components/dailyQuestion/ConfettiBurst';

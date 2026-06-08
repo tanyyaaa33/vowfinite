@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { GUEST_COUPLE } from '../constants/guestData';
 import { subscribeToCouple } from '../utils/firebase';
 
 const CoupleContext = createContext({
@@ -8,12 +9,19 @@ const CoupleContext = createContext({
   coupleId: null,
 });
 
-export function CoupleProvider({ coupleId, children }) {
+export function CoupleProvider({ coupleId, isGuest = false, children }) {
   const [couple, setCouple] = useState(null);
-  const [loading, setLoading] = useState(Boolean(coupleId));
+  const [loading, setLoading] = useState(Boolean(coupleId) && !isGuest);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (isGuest) {
+      setCouple(GUEST_COUPLE);
+      setLoading(false);
+      setError(null);
+      return undefined;
+    }
+
     if (!coupleId) {
       setCouple(null);
       setLoading(false);
@@ -44,7 +52,7 @@ export function CoupleProvider({ coupleId, children }) {
       isActive = false;
       unsubscribe();
     };
-  }, [coupleId]);
+  }, [coupleId, isGuest]);
 
   const value = useMemo(
     () => ({ couple, loading, error, coupleId: coupleId ?? null }),

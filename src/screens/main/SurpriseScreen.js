@@ -6,7 +6,7 @@ import GradientButton from '../../components/GradientButton';
 import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { saveGameSession } from '../../utils/firebase';
 import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
 

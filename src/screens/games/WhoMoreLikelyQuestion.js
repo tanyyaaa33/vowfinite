@@ -17,7 +17,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import AvatarCircle from '../../components/AvatarCircle';
 import PulsingPromptCard from '../../components/whoMoreLikely/PulsingPromptCard';
 import WhoMoreLikelyLoader from '../../components/whoMoreLikely/WhoMoreLikelyLoader';

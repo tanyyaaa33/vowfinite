@@ -13,7 +13,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import StarField from '../../components/dareDrop/StarField';
 import SkipConfirmSheet from '../../components/dareDrop/SkipConfirmSheet';

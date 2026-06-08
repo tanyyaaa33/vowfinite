@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import ShareStoryCard from '../../components/hes10But/ShareStoryCard';
 import Hes10Loader from '../../components/hes10But/Hes10Loader';

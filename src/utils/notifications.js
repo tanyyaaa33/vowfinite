@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import {
@@ -8,7 +7,49 @@ import {
   getPartnerUserId,
   getCoupleMemberIds,
 } from './firebase';
-import { ACTIVITIES_REQUIRED } from './points';
+
+// Keep in sync with ACTIVITIES_REQUIRED in points.js (avoid circular import).
+const ACTIVITIES_REQUIRED = 3;
+
+const isExpoGo =
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === 'storeClient' ||
+  (Constants.executionEnvironment !== 'standalone' &&
+    Constants.executionEnvironment !== 'bare');
+
+let notificationsModule;
+
+function getNotifications() {
+  if (isExpoGo) {
+    return null;
+  }
+
+  if (notificationsModule !== undefined) {
+    return notificationsModule;
+  }
+
+  try {
+    notificationsModule = require('expo-notifications');
+    if (typeof notificationsModule?.setNotificationHandler !== 'function') {
+      notificationsModule = null;
+      return null;
+    }
+    notificationsModule.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: false,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+    return notificationsModule;
+  } catch (error) {
+    console.warn('expo-notifications unavailable:', error.message);
+    notificationsModule = null;
+    return null;
+  }
+}
+
+export const isNotificationsSupported = () => getNotifications() != null;
 
 export const NOTIFICATION_TYPES = {
   DAILY_QUESTION_READY: 'daily_question_ready',
@@ -39,14 +80,6 @@ export function setForegroundNotificationHandler(handler) {
 export function getForegroundNotificationHandler() {
   return foregroundToastHandler;
 }
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: false,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
 
 export function buildNotificationContent(type, data = {}) {
   const name = data.partnerName || data.senderName || data.name || 'Your partner';
@@ -272,6 +305,11 @@ export async function registerForPushNotifications(userId) {
 }
 
 export async function initializePushNotifications(userId) {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return null;
+  }
+
   try {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
@@ -321,6 +359,11 @@ export async function initializePushNotifications(userId) {
 }
 
 export async function scheduleDailyQuestionReminder() {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return;
+  }
+
   try {
     await Notifications.cancelScheduledNotificationAsync(DAILY_QUESTION_REMINDER_ID);
 
@@ -344,6 +387,11 @@ export async function scheduleDailyQuestionReminder() {
 }
 
 export async function scheduleStreakRiskNotification(currentStreak, activitiesToday) {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return;
+  }
+
   try {
     await Notifications.cancelScheduledNotificationAsync(STREAK_RISK_ID);
 
@@ -379,6 +427,11 @@ export async function scheduleStreakRiskNotification(currentStreak, activitiesTo
 }
 
 export async function sendStreakResetNotification() {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return;
+  }
+
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -397,6 +450,11 @@ export async function sendStreakResetNotification() {
 
 export async function sendUnlockNotification(unlock, userId) {
   if (!unlock?.title) return null;
+
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return null;
+  }
 
   try {
     const { body } = buildNotificationContent(NOTIFICATION_TYPES.POINTS_UNLOCK, {
@@ -433,6 +491,11 @@ export async function sendUnlockNotification(unlock, userId) {
 }
 
 export async function sendStreakMilestoneNotification(coupleId, days) {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return;
+  }
+
   try {
     const { body } = buildNotificationContent(NOTIFICATION_TYPES.STREAK_MILESTONE, {
       streak: days,
@@ -502,11 +565,35 @@ export function handleNotificationResponse(response, navigate) {
 }
 
 export function addNotificationReceivedListener(callback) {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return () => {};
+  }
+
   const subscription = Notifications.addNotificationReceivedListener(callback);
   return () => subscription.remove();
 }
 
 export function addNotificationResponseListener(callback) {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return () => {};
+  }
+
   const subscription = Notifications.addNotificationResponseReceivedListener(callback);
   return () => subscription.remove();
+}
+
+export async function getLastNotificationResponseAsync() {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return null;
+  }
+
+  try {
+    return await Notifications.getLastNotificationResponseAsync();
+  } catch (error) {
+    console.warn('getLastNotificationResponseAsync failed:', error.message);
+    return null;
+  }
 }

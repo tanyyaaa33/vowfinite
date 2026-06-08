@@ -6,7 +6,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { useGamesHub } from '../../hooks/useGamesHub';
 import PointsBalancePill from '../../components/gamesHub/PointsBalancePill';
 import StreakSectionCard from '../../components/gamesHub/StreakSectionCard';

@@ -8,6 +8,7 @@ import {
   serverTimestamp,
 } from './firebase';
 import { getDateKey } from './points';
+import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 
 export const MAX_DAILY_ANSWER_LENGTH = 500;
 
@@ -62,6 +63,11 @@ export function subscribeToDailyQuestion(coupleId, dateKey, callback, onError) {
     return () => {};
   }
 
+  if (isGuestCoupleId(coupleId)) {
+    callback(null);
+    return () => {};
+  }
+
   return onSnapshot(
     getDailyQuestionDocRef(coupleId, dateKey),
     (snap) => {
@@ -86,6 +92,11 @@ export async function submitDailyQuestionAnswer(
   members,
   { question, category, answer }
 ) {
+  if (isGuestCoupleId(coupleId)) {
+    showGuestSignupPrompt();
+    return;
+  }
+
   try {
     const dateKey = getDateKey();
     const ref = getDailyQuestionDocRef(coupleId, dateKey);

@@ -6,7 +6,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { COLORS } from '../constants/colors';
-import { AuthContext } from '../../App';
+import { AuthContext } from '../context/AuthContext';
 import { saveGameSession } from '../utils/firebase';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);

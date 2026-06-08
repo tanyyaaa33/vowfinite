@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
 import {
   addNotificationReceivedListener,
   addNotificationResponseListener,
+  getLastNotificationResponseAsync,
   handleForegroundNotification,
   handleNotificationResponse,
   setForegroundNotificationHandler,
@@ -51,7 +51,7 @@ export default function NotificationManager() {
 
     (async () => {
       try {
-        const response = await Notifications.getLastNotificationResponseAsync();
+        const response = await getLastNotificationResponseAsync();
         if (isActive && response) {
           handleNotificationResponse(response, navigateFromNotification);
         }

@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import AnimatedCheckmark from '../../components/dareDrop/AnimatedCheckmark';
 import HeartBurst from '../../components/dareDrop/HeartBurst';

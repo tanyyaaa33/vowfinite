@@ -7,7 +7,7 @@ import ProgressBar from '../../components/ProgressBar';
 import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { LOVE_LANGUAGES } from '../../constants/gameData';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { saveUserProfile } from '../../utils/firebase';
 
 export default function LoveLanguageScreen({ navigation }) {

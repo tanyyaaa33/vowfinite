@@ -9,14 +9,14 @@ import CoupleLoadError from '../../components/CoupleLoadError';
 import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { auth, signOut } from '../../utils/firebase';
 import { useCouple } from '../../hooks/useCouple';
 import UnlocksSection from '../../components/UnlocksSection';
 import { getLevel, getProgressToNextLevel, formatPoints, getStreakCount, getFreezeTokens } from '../../utils/points';
 
 export default function ProfileScreen() {
-  const { user, profile } = useContext(AuthContext);
+  const { user, profile, isGuest, exitGuestMode } = useContext(AuthContext);
   const { couple, loading, error } = useCouple();
 
   if (loading) {
@@ -44,6 +44,14 @@ export default function ProfileScreen() {
   const progress = getProgressToNextLevel(points);
 
   const doSignOut = () => {
+    if (isGuest) {
+      Alert.alert('Leave preview?', 'Sign up to save your profile and play with your partner.', [
+        { text: 'Stay', style: 'cancel' },
+        { text: 'Sign up', onPress: exitGuestMode },
+      ]);
+      return;
+    }
+
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {

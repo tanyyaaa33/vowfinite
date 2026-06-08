@@ -7,7 +7,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import ReactionRow from '../../components/ReactionRow';
 import DareDropLoader from '../../components/dareDrop/DareDropLoader';

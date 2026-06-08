@@ -13,7 +13,7 @@ import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
 import { GAMES, getTodayDailyQuestion } from '../../constants/gameData';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { useCouple } from '../../hooks/useCouple';
 import {
   getLevel,

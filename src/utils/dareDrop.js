@@ -9,6 +9,7 @@ import {
   serverTimestamp,
 } from './firebase';
 import { DARE_CATEGORY_COLORS } from '../constants/gameData';
+import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 
 export function getDareDropRef(coupleId, dareDropId) {
   return doc(db, 'couples', coupleId, 'dareDrop', dareDropId);
@@ -51,6 +52,11 @@ export function subscribeToDareDropHistory(coupleId, callback, onError) {
     return () => {};
   }
 
+  if (isGuestCoupleId(coupleId)) {
+    callback([]);
+    return () => {};
+  }
+
   return onSnapshot(
     collection(db, 'couples', coupleId, 'dareDrop'),
     (snap) => {
@@ -77,6 +83,11 @@ export function subscribeToDareDropHistory(coupleId, callback, onError) {
 
 export function subscribeToDareDrop(coupleId, dareDropId, callback, onError) {
   if (!coupleId || !dareDropId) {
+    return () => {};
+  }
+
+  if (isGuestCoupleId(coupleId)) {
+    callback(null);
     return () => {};
   }
 
@@ -115,6 +126,11 @@ export function findCompletedDares(items, userId) {
 }
 
 export async function createDareDropOffer(coupleId, userId, dareMeta) {
+  if (isGuestCoupleId(coupleId)) {
+    showGuestSignupPrompt();
+    return null;
+  }
+
   try {
     const safeUserId = String(userId || 'user');
     const dareDropId = `${Date.now()}_${safeUserId.slice(0, 6)}`;

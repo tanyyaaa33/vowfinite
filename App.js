@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -26,7 +26,10 @@ import { StreakManager } from './src/hooks/useStreakManager';
 import { navigationRef, flushPendingNavigation, clearPendingNavigation } from './src/navigation/navigationRef';
 import { COLORS } from './src/constants/colors';
 import { FONTS } from './src/constants/fonts';
-import { onAuthStateChanged, getUserProfile, auth } from './src/utils/firebase';
+import { onAuthStateChanged, getUserProfile, auth, isFirebaseConfigured } from './src/utils/firebase';
+import FirebaseSetupScreen from './src/components/FirebaseSetupScreen';
+import GuestPreviewBanner from './src/components/GuestPreviewBanner';
+import { GUEST_PROFILE } from './src/constants/guestData';
 import {
   initializePushNotifications,
   setupCoupleNotifications,
@@ -58,13 +61,7 @@ import DareDropReaction from './src/screens/games/DareDropReaction';
 import VoiceBombRecord from './src/screens/games/VoiceBombRecord';
 import VoiceBombListen from './src/screens/games/VoiceBombListen';
 import VoiceBombReply from './src/screens/games/VoiceBombReply';
-
-export const AuthContext = createContext({
-  user: null,
-  profile: null,
-  profileLoading: false,
-  refreshProfile: async () => null,
-});
+import { AuthContext } from './src/context/AuthContext';
 
 const AuthStack = createStackNavigator();
 const OnboardingStack = createStackNavigator();
@@ -188,12 +185,15 @@ const gameScreens = [
 
 function MainNavigator() {
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }}>
-      <RootStack.Screen name="MainTabs" component={MainTabs} />
-      {gameScreens.map(({ name, component }) => (
-        <RootStack.Screen key={name} name={name} component={component} />
-      ))}
-    </RootStack.Navigator>
+    <View style={{ flex: 1 }}>
+      <GuestPreviewBanner />
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Screen name="MainTabs" component={MainTabs} />
+        {gameScreens.map(({ name, component }) => (
+          <RootStack.Screen key={name} name={name} component={component} />
+        ))}
+      </RootStack.Navigator>
+    </View>
   );
 }
 
@@ -209,8 +209,23 @@ function getOnboardingInitialRoute(profile) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
+  const [authLoading, setAuthLoading] = useState(isFirebaseConfigured);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [fontsReady, setFontsReady] = useState(false);
+
+  const enterGuestMode = useCallback(() => {
+    setIsGuest(true);
+    setProfile(GUEST_PROFILE);
+    setUser(null);
+    clearPendingNavigation();
+  }, []);
+
+  const exitGuestMode = useCallback(() => {
+    setIsGuest(false);
+    setProfile(null);
+    clearPendingNavigation();
+  }, []);
 
   const [fontsLoaded, fontError] = useFonts({
     DMSans_400Regular,
@@ -245,14 +260,47 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    if (fontsLoaded || fontError) {
+      setFontsReady(true);
+      return undefined;
+    }
+
+    const fontTimeout = setTimeout(() => setFontsReady(true), 8000);
+    return () => clearTimeout(fontTimeout);
+  }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) {
+      setAuthLoading(false);
+      return undefined;
+    }
+
     let isActive = true;
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const authTimeout = setTimeout(() => {
+      if (isActive) {
+        console.warn('Auth check timed out — continuing without blocking startup.');
+        setAuthLoading(false);
+      }
+    }, 10000);
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (!isActive) return;
 
       setUser(firebaseUser);
+      setAuthLoading(false);
 
-      if (firebaseUser) {
+      if (!firebaseUser) {
+        if (!isGuest) {
+          setProfile(null);
+          clearPendingNavigation();
+        }
+        return;
+      }
+
+      setIsGuest(false);
+
+      void (async () => {
         try {
           const data = await getUserProfile(firebaseUser.uid);
           if (!isActive) return;
@@ -276,28 +324,31 @@ export default function App() {
         } catch (error) {
           console.warn('Push registration failed:', error.message);
         }
-      } else if (isActive) {
-        setProfile(null);
-        clearPendingNavigation();
-      }
-
-      if (isActive) {
-        setAuthLoading(false);
-      }
+      })();
     });
 
     return () => {
       isActive = false;
+      clearTimeout(authTimeout);
       unsubscribe();
     };
-  }, []);
+  }, [isGuest]);
 
   const authContextValue = useMemo(
-    () => ({ user, profile, profileLoading, refreshProfile }),
-    [user, profile, profileLoading, refreshProfile]
+    () => ({
+      user,
+      profile,
+      profileLoading,
+      refreshProfile,
+      isGuest,
+      enterGuestMode,
+      exitGuestMode,
+    }),
+    [user, profile, profileLoading, refreshProfile, isGuest, enterGuestMode, exitGuestMode]
   );
 
   const renderNavigator = () => {
+    if (isGuest) return <MainNavigator />;
     if (!user) return <AuthNavigator />;
     if (!profile?.coupleId) {
       if (!profile?.name) {
@@ -321,13 +372,17 @@ export default function App() {
     return <MainNavigator />;
   };
 
-  if ((!fontsLoaded && !fontError) || authLoading) {
+  if (!fontsReady || authLoading) {
     return (
       <View style={loadingStyles.container}>
         <LoadingSpinner size="large" />
         <Text style={loadingStyles.message}>Loading VowFinity...</Text>
       </View>
     );
+  }
+
+  if (!isFirebaseConfigured) {
+    return <FirebaseSetupScreen />;
   }
 
   return (
@@ -347,8 +402,8 @@ export default function App() {
               <StatusBar style="dark" />
               {renderNavigator()}
             </NavigationContainer>
-            <NotificationManager />
-            <StreakManager />
+            {!isGuest && <NotificationManager />}
+            {!isGuest && <StreakManager />}
           </CoupleDataProvider>
         </AuthContext.Provider>
       </PointsToastProvider>

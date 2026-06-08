@@ -8,6 +8,7 @@ import {
   collection,
   serverTimestamp,
 } from './firebase';
+import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 
 export function getVoiceBombRef(coupleId, voiceBombId) {
   return doc(db, 'couples', coupleId, 'voiceBomb', voiceBombId);
@@ -15,6 +16,11 @@ export function getVoiceBombRef(coupleId, voiceBombId) {
 
 export function subscribeToVoiceBomb(coupleId, voiceBombId, callback, onError) {
   if (!coupleId || !voiceBombId) {
+    return () => {};
+  }
+
+  if (isGuestCoupleId(coupleId)) {
+    callback(null);
     return () => {};
   }
 
@@ -37,6 +43,11 @@ export function subscribeToVoiceBomb(coupleId, voiceBombId, callback, onError) {
 }
 
 export async function createVoiceBomb(coupleId, userId, payload, voiceBombIdOverride) {
+  if (isGuestCoupleId(coupleId)) {
+    showGuestSignupPrompt();
+    return null;
+  }
+
   try {
     const safeUserId = String(userId || 'user');
     const voiceBombId =

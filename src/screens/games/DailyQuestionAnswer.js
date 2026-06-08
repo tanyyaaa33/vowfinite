@@ -18,7 +18,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import AvatarCircle from '../../components/AvatarCircle';
 import ShimmerOverlay from '../../components/dailyQuestion/ShimmerOverlay';

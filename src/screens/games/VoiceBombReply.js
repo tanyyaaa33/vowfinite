@@ -13,7 +13,7 @@ import {
   useAudioPlayerStatus,
   setAudioModeAsync,
 } from 'expo-audio';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import DarkOrbs from '../../components/voiceBomb/DarkOrbs';
 import PulseRings from '../../components/voiceBomb/PulseRings';

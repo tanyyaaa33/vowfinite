@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import DarkOrbs from '../../components/voiceBomb/DarkOrbs';
 import PromptGlow from '../../components/voiceBomb/PromptGlow';

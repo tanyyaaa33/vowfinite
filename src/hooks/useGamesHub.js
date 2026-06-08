@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { AuthContext } from '../../App';
+import { AuthContext } from '../context/AuthContext';
+import { GUEST_PARTNER_ID, GUEST_SESSIONS } from '../constants/guestData';
 import { useCouple } from './useCouple';
 import { subscribeToCoupleGames, getPartnerUserId } from '../utils/firebase';
 import {
@@ -13,7 +14,7 @@ import { getStreakCount } from '../utils/points';
 const EMPTY_DAILY_STATUS = { status: 'answer', label: 'Answer Now' };
 
 export function useGamesHub() {
-  const { profile, profileLoading } = useContext(AuthContext);
+  const { profile, profileLoading, isGuest } = useContext(AuthContext);
   const { couple, loading: coupleLoading, error: coupleError } = useCouple();
   const [sessions, setSessions] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(true);
@@ -22,6 +23,12 @@ export function useGamesHub() {
   const [partnerLoading, setPartnerLoading] = useState(Boolean(profile?.coupleId));
 
   useEffect(() => {
+    if (isGuest) {
+      setPartnerId(GUEST_PARTNER_ID);
+      setPartnerLoading(false);
+      return undefined;
+    }
+
     if (!profile?.coupleId || !profile?.uid) {
       setPartnerId(null);
       setPartnerLoading(false);
@@ -46,9 +53,16 @@ export function useGamesHub() {
     return () => {
       isActive = false;
     };
-  }, [profile?.coupleId, profile?.uid]);
+  }, [profile?.coupleId, profile?.uid, isGuest]);
 
   useEffect(() => {
+    if (isGuest) {
+      setSessions(GUEST_SESSIONS);
+      setGamesLoading(false);
+      setGamesError(null);
+      return undefined;
+    }
+
     if (!profile?.coupleId) {
       setSessions([]);
       setGamesLoading(false);
@@ -79,7 +93,7 @@ export function useGamesHub() {
       isActive = false;
       unsubscribe();
     };
-  }, [profile?.coupleId]);
+  }, [profile?.coupleId, isGuest]);
 
   const hubData = useMemo(() => {
     try {
@@ -117,9 +131,9 @@ export function useGamesHub() {
   }, [couple, sessions, profile?.uid, profile?.partnerName, partnerId]);
 
   const hasCouple = Boolean(profile?.coupleId);
-  const loading =
-    profileLoading ||
-    (hasCouple && (coupleLoading || gamesLoading || partnerLoading));
+  const loading = isGuest
+    ? coupleLoading
+    : profileLoading || (hasCouple && (coupleLoading || gamesLoading || partnerLoading));
 
   return {
     ...hubData,

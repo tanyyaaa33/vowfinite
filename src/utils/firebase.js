@@ -24,23 +24,33 @@ import {
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GUEST_COUPLE, GUEST_PARTNER_ID } from '../constants/guestData';
+import { isGuestCoupleId } from './guestMode';
 
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT.appspot.com',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: 'AIzaSyDpwoeXXbnB4LijcsMEOMjy9CI1dUq0Y90',
+  authDomain: 'vowfinity.firebaseapp.com',
+  projectId: 'vowfinity',
+  storageBucket: 'vowfinity.firebasestorage.app',
+  messagingSenderId: '901077726876',
+  appId: '1:901077726876:web:4b2c7a06c3a77e22db1f59',
 };
+
+export const isFirebaseConfigured =
+  firebaseConfig.apiKey !== 'YOUR_API_KEY' &&
+  firebaseConfig.projectId !== 'YOUR_PROJECT_ID';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 let auth;
 try {
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
+  if (typeof getReactNativePersistence === 'function') {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } else {
+    auth = getAuth(app);
+  }
 } catch {
   auth = getAuth(app);
 }
@@ -126,6 +136,10 @@ export async function getExpoPushToken(userId) {
 }
 
 export async function getPartnerUserId(coupleId, currentUserId) {
+  if (isGuestCoupleId(coupleId)) {
+    return GUEST_PARTNER_ID;
+  }
+
   try {
     const snap = await getDoc(doc(db, 'couples', coupleId));
     if (!snap.exists()) return null;
@@ -138,6 +152,10 @@ export async function getPartnerUserId(coupleId, currentUserId) {
 }
 
 export async function getCoupleMemberIds(coupleId) {
+  if (isGuestCoupleId(coupleId)) {
+    return GUEST_COUPLE.members;
+  }
+
   try {
     const snap = await getDoc(doc(db, 'couples', coupleId));
     if (!snap.exists()) return [];
@@ -300,6 +318,10 @@ export function subscribeToCoupleGames(coupleId, callback, onError) {
 }
 
 export async function saveGameSession(coupleId, gameId, data) {
+  if (isGuestCoupleId(coupleId)) {
+    return;
+  }
+
   try {
     await addDoc(collection(db, 'couples', coupleId, 'games'), {
       gameId,

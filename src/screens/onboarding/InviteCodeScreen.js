@@ -14,7 +14,7 @@ import GradientButton from '../../components/GradientButton';
 import ProgressBar from '../../components/ProgressBar';
 import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { createCouple, joinCouple, saveUserProfile } from '../../utils/firebase';
 
 function generateCode() {

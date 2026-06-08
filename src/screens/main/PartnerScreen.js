@@ -10,7 +10,7 @@ import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
 import { LOVE_LANGUAGES } from '../../constants/gameData';
 import { getStreakCount } from '../../utils/points';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { useCouple } from '../../hooks/useCouple';
 
 export default function PartnerScreen() {

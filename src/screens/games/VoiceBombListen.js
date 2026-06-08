@@ -18,7 +18,7 @@ import {
   useAudioPlayerStatus,
   setAudioModeAsync,
 } from 'expo-audio';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import GradientButton from '../../components/GradientButton';
 import AvatarCircle from '../../components/AvatarCircle';
 import ReactionRow from '../../components/ReactionRow';

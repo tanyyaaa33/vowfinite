@@ -1,5 +1,5 @@
 import { useContext, useCallback, useRef } from 'react';
-import { AuthContext } from '../../App';
+import { AuthContext } from '../context/AuthContext';
 import { usePointsToast } from '../components/PointsToast';
 import { completeGameActivity } from '../utils/points';
 import { sendUnlockNotification, notifyPartner, NOTIFICATION_TYPES } from '../utils/notifications';

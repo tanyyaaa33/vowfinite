@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { AuthContext } from '../../context/AuthContext';
 import {
   View,
   Text,
@@ -21,33 +22,59 @@ import {
   saveUserProfile,
   auth,
 } from '../../utils/firebase';
+import { formatAuthError } from '../../utils/authErrors';
 
 export default function LoginScreen({ navigation }) {
+  const { enterGuestMode, exitGuestMode, isGuest } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const handleAuth = async () => {
-    if (!email.trim() || !password.trim()) {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
       Alert.alert('Missing info', 'Please enter your email and password.');
       return;
+    }
+
+    if (trimmedPassword.length < 6) {
+      Alert.alert('Password too short', 'Use at least 6 characters.');
+      return;
+    }
+
+    if (isGuest) {
+      exitGuestMode();
     }
 
     setLoading(true);
     try {
       if (isSignUp) {
-        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await saveUserProfile(user.uid, {
-          email: email.trim(),
-          createdAt: new Date().toISOString(),
-          onboardingComplete: false,
-        });
+        const { user } = await createUserWithEmailAndPassword(
+          auth,
+          trimmedEmail,
+          trimmedPassword
+        );
+        try {
+          await saveUserProfile(user.uid, {
+            email: trimmedEmail,
+            createdAt: new Date().toISOString(),
+            onboardingComplete: false,
+          });
+        } catch (profileError) {
+          console.warn('Profile save failed after sign-up:', profileError.message);
+          Alert.alert(
+            'Account created',
+            'Your account was created but saving your profile failed. Make sure Firestore is enabled in Firebase Console, then continue — you can complete onboarding next.'
+          );
+        }
       } else {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+        await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
       }
     } catch (error) {
-      Alert.alert('Oops', error.message);
+      Alert.alert(isSignUp ? 'Sign up failed' : 'Sign in failed', formatAuthError(error));
     } finally {
       setLoading(false);
     }
@@ -110,6 +137,10 @@ export default function LoginScreen({ navigation }) {
                   {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
                   <Text style={styles.switchLink}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
                 </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={enterGuestMode} style={styles.previewRow}>
+                <Text style={styles.previewText}>Explore without signing in</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -183,5 +214,15 @@ const styles = StyleSheet.create({
   switchLink: {
     fontFamily: FONTS.semiBold,
     color: COLORS.pink,
+  },
+  previewRow: {
+    marginTop: 28,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  previewText: {
+    fontFamily: FONTS.medium,
+    fontSize: 15,
+    color: COLORS.purple,
   },
 });

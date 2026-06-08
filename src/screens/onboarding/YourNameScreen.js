@@ -6,7 +6,7 @@ import GradientButton from '../../components/GradientButton';
 import ProgressBar from '../../components/ProgressBar';
 import { COLORS, GRADIENTS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
-import { AuthContext } from '../../../App';
+import { AuthContext } from '../../context/AuthContext';
 import { saveUserProfile } from '../../utils/firebase';
 
 export default function YourNameScreen({ navigation }) {

@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { AppState } from 'react-native';
-import { AuthContext } from '../../App';
+import { AuthContext } from '../context/AuthContext';
 import { useCoupleContext } from '../context/CoupleContext';
 import { checkStreak, clearPendingMilestone } from '../utils/points';
 import { setupCoupleNotifications, sendStreakMilestoneNotification } from '../utils/notifications';
