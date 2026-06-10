@@ -9,7 +9,7 @@ export const HUB_GAMES = [
   {
     id: 'who-more-likely',
     title: "Who's More Likely",
-    description: 'Tap who you think it is',
+    description: 'Answer 5 prompts, reveal when you both finish',
     emoji: '💭',
     screens: ['WhoMoreLikelyQuestion', 'WhoMoreLikelyReveal'],
   },
@@ -53,8 +53,8 @@ export const GAMES = [
   {
     id: 'who-more-likely',
     title: 'Who\'s More Likely',
-    subtitle: 'Guess what your partner thinks',
-    description: 'Guess what your partner thinks',
+    subtitle: '5 questions — answer anytime, reveal together',
+    description: '5 questions — answer anytime, reveal together',
     emoji: '🤔',
     color: '#C084FC',
     screens: ['WhoMoreLikelyQuestion', 'WhoMoreLikelyReveal'],
@@ -126,19 +126,69 @@ export function getTodayDailyQuestion() {
 
 export const DAILY_QUESTIONS = DAILY_QUESTIONS_CATALOG.map((item) => item.question);
 
+export const WHO_MORE_LIKELY_BATCH_SIZE = 5;
+
 export const WHO_MORE_LIKELY = [
   'Who\'s more likely to plan a surprise date?',
   'Who\'s more likely to stay up late binge-watching?',
   'Who\'s more likely to cry during a movie?',
   'Who\'s more likely to forget an anniversary?',
   'Who\'s more likely to start a dance party in the kitchen?',
+  'Who\'s more likely to apologize first after a fight?',
+  'Who\'s more likely to order dessert for the table?',
+  'Who\'s more likely to get lost even with GPS?',
+  'Who\'s more likely to send a good morning text?',
+  'Who\'s more likely to hog the blankets at night?',
+  'Who\'s more likely to suggest a spontaneous road trip?',
+  'Who\'s more likely to remember everyone\'s birthday?',
+  'Who\'s more likely to burn something while cooking?',
+  'Who\'s more likely to fall asleep during a movie?',
+  'Who\'s more likely to take forever getting ready?',
+  'Who\'s more likely to start singing in public?',
+  'Who\'s more likely to win an argument?',
+  'Who\'s more likely to be the bigger flirt?',
+  'Who\'s more likely to plan the vacation?',
+  'Who\'s more likely to spend money on something silly?',
+  'Who\'s more likely to get hangry?',
+  'Who\'s more likely to befriend a stranger?',
+  'Who\'s more likely to send a meme at 2 AM?',
+  'Who\'s more likely to cry at a wedding?',
+  'Who\'s more likely to be the designated photographer?',
+  'Who\'s more likely to suggest staying in over going out?',
+  'Who\'s more likely to have a secret snack stash?',
+  'Who\'s more likely to be the first one on the dance floor?',
+  'Who\'s more likely to forget where they parked?',
+  'Who\'s more likely to say "I love you" first?',
+  'Who\'s more likely to pick the restaurant?',
+  'Who\'s more likely to binge a new show in one weekend?',
+  'Who\'s more likely to be the cuddlier one?',
+  'Who\'s more likely to get competitive during a game?',
+  'Who\'s more likely to leave voice notes instead of texting?',
+  'Who\'s more likely to wake up early on a weekend?',
+  'Who\'s more likely to be the messy one?',
+  'Who\'s more likely to plan a picnic?',
+  'Who\'s more likely to talk to pets like they\'re people?',
+  'Who\'s more likely to suggest a couple selfie?',
 ];
 
-export function getTodayWhoMoreLikelyQuestion() {
+export function getTodayWhoMoreLikelyQuestions(
+  batchSize = WHO_MORE_LIKELY_BATCH_SIZE,
+  date = new Date()
+) {
   if (!WHO_MORE_LIKELY.length) {
-    return 'Who\'s more likely to plan a surprise date?';
+    return ['Who\'s more likely to plan a surprise date?'];
   }
-  return WHO_MORE_LIKELY[new Date().getDate() % WHO_MORE_LIKELY.length];
+
+  const start = date.getDate() % WHO_MORE_LIKELY.length;
+  const questions = [];
+  for (let i = 0; i < batchSize; i += 1) {
+    questions.push(WHO_MORE_LIKELY[(start + i) % WHO_MORE_LIKELY.length]);
+  }
+  return questions;
+}
+
+export function getTodayWhoMoreLikelyQuestion() {
+  return getTodayWhoMoreLikelyQuestions(1)[0];
 }
 
 export const LOVE_LANGUAGES = [

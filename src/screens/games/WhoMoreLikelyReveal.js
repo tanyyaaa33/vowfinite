@@ -1,14 +1,9 @@
-import React, { useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,21 +27,22 @@ import { useCouple } from '../../hooks/useCouple';
 import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
-import { getCoupleMemberIds } from '../../utils/firebase';
+import { WHO_MORE_LIKELY_BATCH_SIZE } from '../../constants/gameData';
 import { POINTS } from '../../utils/points';
 import {
   subscribeToWhoMoreLikely,
-  saveWhoMoreLikelyArgument,
   finalizeWhoMoreLikelyRound,
   userIdToDisplayName,
-  getUserArgumentFromDoc,
-  getPartnerArgumentFromDoc,
   stripQuestionPrefix,
   formatLastPlayed,
+  getMatchCountFromDoc,
+  getQuestionCount,
+  getSessionQuestions,
+  getUserAnswersMap,
+  getPartnerAnswersMap,
 } from '../../utils/whoMoreLikely';
 
 const PARTNER_GRADIENT = ['#C084FC', '#9B7EDE'];
-const MAX_ARGUMENT_LENGTH = 280;
 
 function BouncingAvatars({ leftName, rightName }) {
   const leftY = useSharedValue(0);
@@ -94,52 +90,7 @@ function BouncingAvatars({ leftName, rightName }) {
   );
 }
 
-function VersusPanel({ name, pickedName, align, delay }) {
-  const translateX = useSharedValue(align === 'left' ? -60 : 60);
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    translateX.value = withDelay(
-      delay,
-      withSpring(0, { damping: 14, stiffness: 120 })
-    );
-    opacity.value = withDelay(delay, withTiming(1, { duration: 350 }));
-  }, [delay, opacity, translateX]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        styles.versusHalf,
-        align === 'left' ? styles.versusLeft : styles.versusRight,
-        animatedStyle,
-      ]}
-    >
-      <LinearGradient
-        colors={align === 'left' ? GRADIENTS.primary : PARTNER_GRADIENT}
-        style={styles.versusGradient}
-      >
-        <AvatarCircle
-          initial={name}
-          size={38}
-          gradient={align === 'left' ? GRADIENTS.primary : PARTNER_GRADIENT}
-        />
-        <Text style={styles.versusName} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={styles.versusPick} numberOfLines={2}>
-          Picked {pickedName}
-        </Text>
-      </LinearGradient>
-    </Animated.View>
-  );
-}
-
-function StatsCard({ stats }) {
+function StatsCard({ stats, matchCount, questionCount }) {
   const totalPlayed = stats?.totalPlayed ?? 0;
   const agreementPercent = stats?.agreementPercent ?? 0;
   const lastPlayed = formatLastPlayed(stats?.lastPlayedAt);
@@ -149,13 +100,13 @@ function StatsCard({ stats }) {
       <Text style={styles.statsTitle}>Your stats</Text>
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{totalPlayed}</Text>
-          <Text style={styles.statLabel}>Played</Text>
+          <Text style={styles.statValue}>{matchCount}/{questionCount}</Text>
+          <Text style={styles.statLabel}>Today</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{agreementPercent}%</Text>
-          <Text style={styles.statLabel}>Agree</Text>
+          <Text style={styles.statLabel}>All time</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
@@ -165,7 +116,49 @@ function StatsCard({ stats }) {
           <Text style={styles.statLabel}>Last</Text>
         </View>
       </View>
+      {totalPlayed > 0 ? (
+        <Text style={styles.statsFootnote}>
+          Played {totalPlayed} round{totalPlayed === 1 ? '' : 's'} together
+        </Text>
+      ) : null}
     </View>
+  );
+}
+
+function ResultRow({ index, question, userPicked, partnerPicked, matched, delay }) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(12);
+
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 300 }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 16, stiffness: 140 }));
+  }, [delay, opacity, translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.resultRow, SHADOWS.card, animatedStyle]}>
+      <View style={styles.resultHeader}>
+        <Text style={styles.resultIndex}>#{index + 1}</Text>
+        <Text style={styles.resultBadge}>{matched ? '✓ Match' : '✗ Different'}</Text>
+      </View>
+      <Text style={styles.resultQuestion} numberOfLines={3}>
+        {stripQuestionPrefix(question)}
+      </Text>
+      <View style={styles.resultPicks}>
+        <View style={styles.pickCol}>
+          <Text style={styles.pickLabel}>You</Text>
+          <Text style={styles.pickValue} numberOfLines={1}>{userPicked}</Text>
+        </View>
+        <View style={styles.pickCol}>
+          <Text style={styles.pickLabel}>Partner</Text>
+          <Text style={styles.pickValue} numberOfLines={1}>{partnerPicked}</Text>
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -176,20 +169,18 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
   const { completeGame } = useGameCompletion();
 
   const {
-    question,
+    questions: routeQuestions = [],
     dateKey,
-    userChoice,
-    partnerChoice,
-    agreed: initialAgreed,
+    userAnswers: routeUserAnswers = {},
+    partnerAnswers: routePartnerAnswers = {},
+    matchCount: routeMatchCount,
+    questionCount: routeQuestionCount,
   } = route.params || {};
 
   const [ready, setReady] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionData, setSessionData] = useState(null);
   const [stats, setStats] = useState(couple?.whoMoreLikelyStats || null);
-  const [argument, setArgument] = useState('');
-  const [sending, setSending] = useState(false);
-  const [commentVisible, setCommentVisible] = useState(false);
 
   const pointsAwarded = useRef(false);
   const statsFinalized = useRef(false);
@@ -198,17 +189,6 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
 
   const userName = profile?.name || 'You';
   const partnerName = profile?.partnerName || 'Partner';
-  const safeQuestion = question?.trim() || '';
-  const safeUserChoice = userChoice || null;
-  const safePartnerChoice = partnerChoice || null;
-  const isValid = Boolean(
-    safeQuestion && safeUserChoice && safePartnerChoice && dateKey
-  );
-
-  const agreed =
-    sessionData?.agreed ??
-    initialAgreed ??
-    (safeUserChoice === safePartnerChoice);
 
   const memberList = useMemo(() => {
     if (membersRef.current.length) return membersRef.current;
@@ -216,20 +196,33 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
     return [];
   }, [couple?.members, sessionData]);
 
-  const userPickedName = userIdToDisplayName(
-    safeUserChoice,
-    profile?.uid,
-    memberList,
-    userName,
-    partnerName
-  );
-  const partnerPickedName = userIdToDisplayName(
-    safePartnerChoice,
-    profile?.uid,
-    memberList,
-    userName,
-    partnerName
-  );
+  const questions = useMemo(() => {
+    if (routeQuestions.length) return routeQuestions;
+    return getSessionQuestions(sessionData, []);
+  }, [routeQuestions, sessionData]);
+
+  const questionCount = routeQuestionCount || getQuestionCount(sessionData) || questions.length || WHO_MORE_LIKELY_BATCH_SIZE;
+
+  const resolvedUserAnswers = useMemo(() => {
+    if (sessionData && profile?.uid && memberList.length) {
+      return getUserAnswersMap(sessionData, profile.uid, memberList);
+    }
+    return routeUserAnswers;
+  }, [sessionData, profile?.uid, memberList, routeUserAnswers]);
+
+  const resolvedPartnerAnswers = useMemo(() => {
+    if (sessionData && profile?.uid && memberList.length) {
+      return getPartnerAnswersMap(sessionData, profile.uid, memberList);
+    }
+    return routePartnerAnswers;
+  }, [sessionData, profile?.uid, memberList, routePartnerAnswers]);
+
+  const matchCount =
+    routeMatchCount ?? getMatchCountFromDoc(sessionData) ?? 0;
+
+  const matchPercent = questionCount > 0 ? Math.round((matchCount / questionCount) * 100) : 0;
+  const perfectMatch = matchCount === questionCount;
+  const isValid = Boolean(questions.length && dateKey);
 
   useEffect(() => {
     isMounted.current = true;
@@ -306,29 +299,6 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
   }, [profile?.coupleId, dateKey]);
 
   useEffect(() => {
-    if (agreed) return undefined;
-    const timer = setTimeout(() => {
-      if (isMounted.current) setCommentVisible(true);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [agreed]);
-
-  const commentSlide = useSharedValue(120);
-  const commentOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    if (commentVisible && !agreed) {
-      commentSlide.value = withSpring(0, { damping: 16, stiffness: 140 });
-      commentOpacity.value = withTiming(1, { duration: 300 });
-    }
-  }, [commentVisible, agreed, commentSlide, commentOpacity]);
-
-  const commentAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: commentSlide.value }],
-    opacity: commentOpacity.value,
-  }));
-
-  useEffect(() => {
     if (!isValid || pointsAwarded.current) return undefined;
 
     let active = true;
@@ -336,24 +306,17 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
 
     (async () => {
       try {
-        if (
-          profile?.coupleId &&
-          dateKey &&
-          !statsFinalized.current
-        ) {
+        if (profile?.coupleId && dateKey && !statsFinalized.current) {
           statsFinalized.current = true;
-          const snapshot = await finalizeWhoMoreLikelyRound(
-            profile.coupleId,
-            dateKey,
-            {
-              bothAnswered: true,
-              player1Choice:
-                sessionData?.player1Choice || safeUserChoice,
-              player2Choice:
-                sessionData?.player2Choice || safePartnerChoice,
-              finalized: sessionData?.finalized,
-            }
-          );
+          const snapshot = await finalizeWhoMoreLikelyRound(profile.coupleId, dateKey, {
+            bothCompleted: true,
+            bothAnswered: true,
+            player1Answers: sessionData?.player1Answers,
+            player2Answers: sessionData?.player2Answers,
+            matchCount,
+            questionCount,
+            finalized: sessionData?.finalized,
+          });
           if (active && snapshot) setStats(snapshot);
         }
 
@@ -378,72 +341,48 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
     showPoints,
     profile?.coupleId,
     dateKey,
-    safeUserChoice,
-    safePartnerChoice,
-    sessionData?.player1Choice,
-    sessionData?.player2Choice,
+    matchCount,
+    questionCount,
+    sessionData?.player1Answers,
+    sessionData?.player2Answers,
     sessionData?.finalized,
   ]);
 
-  const handleSendArgument = useCallback(async () => {
-    const trimmed = argument.trim();
-    if (!trimmed || sending) return;
-
-    if (!profile?.coupleId || !profile?.uid || !dateKey) {
-      Alert.alert('Error', 'Could not save your comment.');
-      return;
-    }
-
-    setSending(true);
-    try {
-      let members = membersRef.current.length
-        ? membersRef.current
-        : couple?.members || [];
-      if (!members.length) {
-        try {
-          members = await getCoupleMemberIds(profile.coupleId);
-          if (members.length) membersRef.current = members;
-        } catch (idsError) {
-          console.warn('getCoupleMemberIds failed:', idsError.message);
-        }
-      }
-      await saveWhoMoreLikelyArgument(
-        profile.coupleId,
-        dateKey,
-        profile.uid,
-        members,
-        trimmed
+  const results = useMemo(() => {
+    return questions.map((question, index) => {
+      const key = String(index);
+      const userPickId = resolvedUserAnswers[key];
+      const partnerPickId = resolvedPartnerAnswers[key];
+      const userPicked = userIdToDisplayName(
+        userPickId,
+        profile?.uid,
+        memberList,
+        userName,
+        partnerName
       );
-      if (isMounted.current) {
-        setArgument('');
-      }
-    } catch (error) {
-      if (isMounted.current) {
-        Alert.alert('Error', error?.message || 'Could not send comment.');
-      }
-    } finally {
-      if (isMounted.current) {
-        setSending(false);
-      }
-    }
+      const partnerPicked = userIdToDisplayName(
+        partnerPickId,
+        profile?.uid,
+        memberList,
+        userName,
+        partnerName
+      );
+      return {
+        question,
+        userPicked,
+        partnerPicked,
+        matched: Boolean(userPickId && partnerPickId && userPickId === partnerPickId),
+      };
+    });
   }, [
-    argument,
-    sending,
-    profile?.coupleId,
+    questions,
+    resolvedUserAnswers,
+    resolvedPartnerAnswers,
     profile?.uid,
-    dateKey,
-    couple?.members,
+    memberList,
+    userName,
+    partnerName,
   ]);
-
-  const userArgument = sessionData
-    ? getUserArgumentFromDoc(sessionData, profile?.uid, memberList)
-    : '';
-  const partnerArgument = sessionData
-    ? getPartnerArgumentFromDoc(sessionData, profile?.uid, memberList)
-    : '';
-
-  const agreementPercent = stats?.agreementPercent ?? 0;
-  const promptDisplay = stripQuestionPrefix(safeQuestion);
 
   const screenLoading =
     !ready || !isValid || coupleLoading || (Boolean(profile?.coupleId) && !sessionReady);
@@ -464,153 +403,67 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
     <View style={styles.screen}>
       <View style={styles.orbPink} pointerEvents="none" />
       <View style={styles.orbPurple} pointerEvents="none" />
-      {agreed && <ConfettiBurst />}
+      {perfectMatch && <ConfettiBurst />}
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
         >
-          <ScrollView
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+          <Text style={styles.title} numberOfLines={2}>
+            {perfectMatch ? "You're in sync ✨" : 'Results are in 👀'}
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={3}>
+            {perfectMatch
+              ? `You matched on all ${questionCount} questions — same wavelength.`
+              : `You matched on ${matchCount} of ${questionCount} questions (${matchPercent}%).`}
+          </Text>
+
+          <BouncingAvatars leftName={userName} rightName={partnerName} />
+
+          <LinearGradient
+            colors={GRADIENTS.primary}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.scorePill}
           >
-            {agreed ? (
-              <>
-                <Text style={styles.celebrationTitle} numberOfLines={2}>
-                  You&apos;re in sync ✨
-                </Text>
-                <Text style={styles.celebrationSubtitle} numberOfLines={2}>
-                  Same pick, same wavelength — that&apos;s love language.
-                </Text>
+            <Text style={styles.scoreText}>
+              {matchCount}/{questionCount} matched
+            </Text>
+          </LinearGradient>
 
-                <BouncingAvatars leftName={userName} rightName={partnerName} />
+          <Text style={styles.sectionTitle}>Question by question</Text>
 
-                <LinearGradient
-                  colors={GRADIENTS.primary}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.compatPill}
-                >
-                  <Text style={styles.compatText}>+1 Compatibility ✓</Text>
-                </LinearGradient>
-
-                <Text style={styles.agreementLine} numberOfLines={2}>
-                  You agree {agreementPercent}% of the time
-                </Text>
-
-                <View style={[styles.promptMini, SHADOWS.card]}>
-                  <Text style={styles.promptMiniLabel}>Today&apos;s prompt</Text>
-                  <Text style={styles.promptMiniText} numberOfLines={3}>
-                    {promptDisplay || safeQuestion}
-                  </Text>
-                  <Text style={styles.matchLine} numberOfLines={2}>
-                    You both picked {userPickedName} 💕
-                  </Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.disagreeTitle} numberOfLines={1}>
-                  Plot twist 👀
-                </Text>
-                <Text style={styles.disagreeSubtitle} numberOfLines={2}>
-                  You didn&apos;t match — time to settle it.
-                </Text>
-
-                <View style={styles.versusRow}>
-                  <VersusPanel
-                    name={userName}
-                    pickedName={userPickedName}
-                    align="left"
-                    delay={150}
-                  />
-                  <View style={styles.versusDivider}>
-                    <Text style={styles.vsText}>VS</Text>
-                  </View>
-                  <VersusPanel
-                    name={partnerName}
-                    pickedName={partnerPickedName}
-                    align="right"
-                    delay={280}
-                  />
-                </View>
-
-                <Text style={styles.discussPrompt} numberOfLines={2}>
-                  Discuss — who is right?
-                </Text>
-
-                {(userArgument || partnerArgument) ? (
-                  <View style={styles.argumentsBlock}>
-                    {userArgument ? (
-                      <View style={styles.argumentBubble}>
-                        <Text style={styles.argumentAuthor}>{userName}</Text>
-                        <Text style={styles.argumentText}>{userArgument}</Text>
-                      </View>
-                    ) : null}
-                    {partnerArgument ? (
-                      <View style={[styles.argumentBubble, styles.argumentBubblePartner]}>
-                        <Text style={styles.argumentAuthor}>{partnerName}</Text>
-                        <Text style={styles.argumentText}>{partnerArgument}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-
-                <Animated.View style={[styles.commentBox, commentAnimatedStyle]}>
-                  <TextInput
-                    style={styles.commentInput}
-                    placeholder="Make your case..."
-                    placeholderTextColor={COLORS.placeholder}
-                    value={argument}
-                    onChangeText={(text) =>
-                      setArgument(text.slice(0, MAX_ARGUMENT_LENGTH))
-                    }
-                    multiline
-                    textAlignVertical="top"
-                  />
-                  <TouchableOpacity
-                    style={[
-                      styles.sendBtn,
-                      (!argument.trim() || sending) && styles.sendBtnDisabled,
-                    ]}
-                    onPress={handleSendArgument}
-                    disabled={!argument.trim() || sending}
-                  >
-                    <LinearGradient
-                      colors={GRADIENTS.primary}
-                      style={styles.sendGradient}
-                    >
-                      <Text style={styles.sendText}>
-                        {sending ? 'Sending...' : 'Send'}
-                      </Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </Animated.View>
-              </>
-            )}
-
-            <StatsCard stats={stats} />
-
-            <GradientButton
-              title="Back to Games"
-              onPress={() => {
-                try {
-                  navigation.popToTop();
-                } catch (error) {
-                  try {
-                    navigation.goBack();
-                  } catch (goBackError) {
-                    console.warn('Navigation failed:', goBackError.message);
-                  }
-                }
-              }}
-              style={styles.button}
+          {results.map((result, index) => (
+            <ResultRow
+              key={`${index}-${result.question}`}
+              index={index}
+              question={result.question}
+              userPicked={result.userPicked}
+              partnerPicked={result.partnerPicked}
+              matched={result.matched}
+              delay={80 + index * 50}
             />
-          </ScrollView>
-        </KeyboardAvoidingView>
+          ))}
+
+          <StatsCard stats={stats} matchCount={matchCount} questionCount={questionCount} />
+
+          <GradientButton
+            title="Back to Games"
+            onPress={() => {
+              try {
+                navigation.popToTop();
+              } catch (error) {
+                try {
+                  navigation.goBack();
+                } catch (goBackError) {
+                  console.warn('Navigation failed:', goBackError.message);
+                }
+              }
+            }}
+            style={styles.button}
+          />
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -642,13 +495,12 @@ const styles = StyleSheet.create({
     opacity: 0.1,
   },
   safe: { flex: 1 },
-  flex: { flex: 1 },
   scroll: {
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: 8,
     paddingBottom: 24,
   },
-  celebrationTitle: {
+  title: {
     fontFamily: FONTS.displayItalic,
     fontSize: 22,
     color: COLORS.navy,
@@ -656,7 +508,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingHorizontal: 4,
   },
-  celebrationSubtitle: {
+  subtitle: {
     fontFamily: FONTS.regular,
     fontSize: 13,
     color: COLORS.textMuted,
@@ -675,198 +527,87 @@ const styles = StyleSheet.create({
   bounceHeart: {
     fontSize: 24,
   },
-  compatPill: {
+  scorePill: {
     alignSelf: 'center',
     borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    marginBottom: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginBottom: 20,
   },
-  compatText: {
+  scoreText: {
     fontFamily: FONTS.semiBold,
-    fontSize: 14,
+    fontSize: 16,
     color: '#FFFFFF',
     letterSpacing: 0.3,
   },
-  agreementLine: {
-    fontFamily: FONTS.displayItalic,
-    fontSize: 16,
-    color: COLORS.pink,
+  sectionTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 12,
     textAlign: 'center',
-    marginBottom: 16,
-    fontStyle: 'italic',
-    paddingHorizontal: 4,
   },
-  promptMini: {
+  resultRow: {
     backgroundColor: COLORS.cardBg,
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 14,
-    marginBottom: 16,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  promptMiniLabel: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 10,
-    color: COLORS.pink,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  resultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  promptMiniText: {
+  resultIndex: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 11,
+    color: COLORS.pink,
+  },
+  resultBadge: {
+    fontFamily: FONTS.medium,
+    fontSize: 11,
+    color: COLORS.purple,
+  },
+  resultQuestion: {
     fontFamily: FONTS.displayItalic,
     fontSize: 15,
     color: COLORS.textPrimary,
     lineHeight: 22,
-    marginBottom: 8,
-  },
-  matchLine: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 13,
-    color: COLORS.purple,
-    textAlign: 'center',
-  },
-  disagreeTitle: {
-    fontFamily: FONTS.displayItalic,
-    fontSize: 20,
-    color: COLORS.navy,
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  disagreeSubtitle: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 19,
-    paddingHorizontal: 4,
-  },
-  versusRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginBottom: 14,
-    minHeight: 128,
-  },
-  versusHalf: {
-    flex: 1,
-    minWidth: 0,
-  },
-  versusLeft: {
-    marginRight: 2,
-  },
-  versusRight: {
-    marginLeft: 2,
-  },
-  versusGradient: {
-    flex: 1,
-    borderRadius: 14,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  versusName: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 12,
-    color: '#FFFFFF',
-    maxWidth: '100%',
-  },
-  versusPick: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.92)',
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-  versusDivider: {
-    width: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  vsText: {
-    fontFamily: FONTS.bold,
-    fontSize: 11,
-    color: COLORS.pink,
-  },
-  discussPrompt: {
-    fontFamily: FONTS.displayItalic,
-    fontSize: 15,
-    color: COLORS.pink,
-    textAlign: 'center',
-    marginBottom: 12,
-    fontStyle: 'italic',
-    paddingHorizontal: 4,
-  },
-  argumentsBlock: {
-    gap: 10,
-    marginBottom: 12,
-  },
-  argumentBubble: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignSelf: 'flex-start',
-    maxWidth: '88%',
-  },
-  argumentBubblePartner: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#FFF0F6',
-  },
-  argumentAuthor: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 11,
-    color: COLORS.pink,
-    marginBottom: 4,
-  },
-  argumentText: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: COLORS.textPrimary,
-    lineHeight: 19,
-  },
-  commentBox: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
-    marginBottom: 16,
-    ...SHADOWS.card,
-  },
-  commentInput: {
-    minHeight: 72,
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    color: COLORS.textPrimary,
-    lineHeight: 21,
     marginBottom: 10,
   },
-  sendBtn: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    alignSelf: 'flex-end',
+  resultPicks: {
+    flexDirection: 'row',
+    gap: 10,
   },
-  sendBtnDisabled: {
-    opacity: 0.5,
+  pickCol: {
+    flex: 1,
+    backgroundColor: '#FFF8FB',
+    borderRadius: 10,
+    padding: 10,
+    minWidth: 0,
   },
-  sendGradient: {
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 14,
+  pickLabel: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginBottom: 4,
+    textTransform: 'uppercase',
   },
-  sendText: {
+  pickValue: {
     fontFamily: FONTS.semiBold,
     fontSize: 13,
-    color: '#FFFFFF',
+    color: COLORS.navy,
   },
   statsCard: {
     backgroundColor: COLORS.cardBg,
     borderRadius: 18,
     padding: 14,
+    marginTop: 6,
     marginBottom: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -909,6 +650,13 @@ const styles = StyleSheet.create({
     width: 1,
     height: 32,
     backgroundColor: COLORS.border,
+  },
+  statsFootnote: {
+    fontFamily: FONTS.regular,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 10,
   },
   button: {
     marginTop: 4,

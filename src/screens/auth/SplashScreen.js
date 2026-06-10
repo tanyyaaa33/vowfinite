@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { StyleSheet, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, GRADIENTS } from '../../constants/colors';
-import { FONTS } from '../../constants/fonts';
+import BrandLogo from '../../components/BrandLogo';
+import { GRADIENTS } from '../../constants/colors';
 
 export default function SplashScreen({ navigation }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
 
   useEffect(() => {
     const isMounted = { current: true };
@@ -31,11 +31,7 @@ export default function SplashScreen({ navigation }) {
   return (
     <LinearGradient colors={GRADIENTS.soft} style={styles.container}>
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-        <LinearGradient colors={GRADIENTS.primary} style={styles.logoCircle}>
-          <Text style={styles.logoEmoji}>💕</Text>
-        </LinearGradient>
-        <Text style={styles.title}>VowFinity</Text>
-        <Text style={styles.tagline}>Love, one moment at a time</Text>
+        <BrandLogo size="splash" />
       </Animated.View>
     </LinearGradient>
   );
@@ -49,28 +45,5 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
-  },
-  logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  logoEmoji: {
-    fontSize: 44,
-  },
-  title: {
-    fontFamily: FONTS.display,
-    fontSize: 36,
-    color: COLORS.navy,
-    marginBottom: 8,
-  },
-  tagline: {
-    fontFamily: FONTS.regular,
-    fontSize: 16,
-    color: COLORS.textMuted,
-    letterSpacing: 0.5,
   },
 });

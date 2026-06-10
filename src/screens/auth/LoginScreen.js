@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BrandLogo from '../../components/BrandLogo';
 import GradientButton from '../../components/GradientButton';
 import { COLORS, GRADIENTS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
@@ -93,10 +94,7 @@ export default function LoginScreen({ navigation }) {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.header}>
-              <LinearGradient colors={GRADIENTS.primary} style={styles.iconCircle}>
-                <Text style={styles.iconEmoji}>💕</Text>
-              </LinearGradient>
-              <Text style={styles.title}>VowFinity</Text>
+              <BrandLogo size="header" style={styles.logo} />
               <Text style={styles.subtitle}>
                 {isSignUp ? 'Start your love story' : 'Welcome back, lovebird'}
               </Text>
@@ -162,22 +160,10 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  iconEmoji: { fontSize: 32 },
-  title: {
-    fontFamily: FONTS.display,
-    fontSize: 36,
-    color: COLORS.navy,
-    marginBottom: 8,
+  logo: {
+    marginBottom: 12,
   },
   subtitle: {
     fontFamily: FONTS.regular,

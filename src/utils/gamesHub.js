@@ -1,4 +1,8 @@
-import { HUB_GAMES, getTodayDailyQuestion } from '../constants/gameData';
+import {
+  HUB_GAMES,
+  getTodayDailyQuestion,
+  WHO_MORE_LIKELY_BATCH_SIZE,
+} from '../constants/gameData';
 import { getDateKey } from './points';
 
 export function getTodayQuestion() {
@@ -50,6 +54,38 @@ export function partnerPlayedToday(sessions, gameId, partnerId, todayKey = getDa
   return getTodaySessions(sessions, gameId, todayKey).some(
     (session) => session.userId === partnerId
   );
+}
+
+export function getWhoMoreLikelyStatus(sessions, userId, partnerId, partnerName) {
+  try {
+    const todayKey = getDateKey();
+    const todaySessions = getTodaySessions(sessions, 'who-more-likely', todayKey);
+    const userAnswered = userId
+      ? todaySessions.some((session) => session.userId === userId && session.completed)
+      : false;
+    const partnerAnswered = partnerId
+      ? todaySessions.some((session) => session.userId === partnerId && session.completed)
+      : todaySessions.some((session) => session.completed && session.userId !== userId);
+
+    if (userAnswered && partnerAnswered) {
+      return { status: 'both', label: 'Reveal ready ✓' };
+    }
+    if (userAnswered && !partnerAnswered) {
+      return {
+        status: 'waiting',
+        label: `Waiting for ${partnerName || 'partner'}`,
+      };
+    }
+    if (!userAnswered && partnerAnswered) {
+      return {
+        status: 'answer',
+        label: `${partnerName || 'Partner'} finished — your turn`,
+      };
+    }
+    return { status: 'answer', label: `Answer ${WHO_MORE_LIKELY_BATCH_SIZE} questions` };
+  } catch {
+    return { status: 'answer', label: `Answer ${WHO_MORE_LIKELY_BATCH_SIZE} questions` };
+  }
 }
 
 export function getDailyQuestionStatus(sessions, userId, partnerId, partnerName) {

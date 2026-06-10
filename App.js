@@ -18,6 +18,7 @@ import {
   PlayfairDisplay_400Regular_Italic,
 } from '@expo-google-fonts/playfair-display';
 
+import BrandLogo from './src/components/BrandLogo';
 import LoadingSpinner from './src/components/LoadingSpinner';
 import { PointsToastProvider } from './src/components/PointsToast';
 import NotificationManager from './src/components/NotificationManager';
@@ -375,8 +376,8 @@ export default function App() {
   if (!fontsReady || authLoading) {
     return (
       <View style={loadingStyles.container}>
+        <BrandLogo size="compact" />
         <LoadingSpinner size="large" />
-        <Text style={loadingStyles.message}>Loading VowFinity...</Text>
       </View>
     );
   }
@@ -417,12 +418,7 @@ const loadingStyles = StyleSheet.create({
     backgroundColor: COLORS.screenBg,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-  },
-  message: {
-    fontFamily: FONTS.medium,
-    fontSize: 15,
-    color: COLORS.textMuted,
+    gap: 24,
   },
 });
 

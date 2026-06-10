@@ -10,6 +10,10 @@ import {
 import { getDateKey } from './points';
 import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 import { getPlayerSlot } from './dailyQuestion';
+import {
+  getTodayWhoMoreLikelyQuestions,
+  WHO_MORE_LIKELY_BATCH_SIZE,
+} from '../constants/gameData';
 
 export function getWhoMoreLikelyDocRef(coupleId, dateKey = getDateKey()) {
   return doc(db, 'couples', coupleId, 'whoMoreLikely', dateKey);
@@ -33,13 +37,58 @@ export function userIdToDisplayName(pickedUserId, userId, members, userName, par
   return partnerName || 'Partner';
 }
 
+function getAnswersField(slot) {
+  return `${slot}Answers`;
+}
+
+function normalizeAnswersMap(value) {
+  if (!value || typeof value !== 'object') return {};
+  return value;
+}
+
+function countAnswers(answers) {
+  return Object.values(normalizeAnswersMap(answers)).filter(Boolean).length;
+}
+
+export function getQuestionCount(docData) {
+  return docData?.questionCount || WHO_MORE_LIKELY_BATCH_SIZE;
+}
+
+export function getSessionQuestions(docData, fallbackQuestions = []) {
+  if (Array.isArray(docData?.questions) && docData.questions.length) {
+    return docData.questions;
+  }
+  return fallbackQuestions;
+}
+
+export function getUserAnswersMap(docData, userId, members) {
+  if (!docData || !userId) return {};
+  const slot = getPlayerSlot(userId, members);
+  return normalizeAnswersMap(docData[getAnswersField(slot)]);
+}
+
+export function getPartnerAnswersMap(docData, userId, members) {
+  if (!docData || !userId) return {};
+  const slot = getPlayerSlot(userId, members);
+  const partnerSlot = slot === 'player1' ? 'player2' : 'player1';
+  return normalizeAnswersMap(docData[getAnswersField(partnerSlot)]);
+}
+
 export function getUserChoiceFromDoc(docData, userId, members) {
+  const answers = getUserAnswersMap(docData, userId, members);
+  if (Object.keys(answers).length) {
+    return answers['0'] || null;
+  }
   if (!docData || !userId) return null;
   const slot = getPlayerSlot(userId, members);
   return docData[`${slot}Choice`] || null;
 }
 
 export function getPartnerChoiceFromDoc(docData, userId, members) {
+  const answers = getPartnerAnswersMap(docData, userId, members);
+  if (Object.keys(answers).length) {
+    return answers['0'] || null;
+  }
   if (!docData || !userId) return null;
   const slot = getPlayerSlot(userId, members);
   const partnerSlot = slot === 'player1' ? 'player2' : 'player1';
@@ -47,20 +96,77 @@ export function getPartnerChoiceFromDoc(docData, userId, members) {
 }
 
 export function hasUserAnswered(docData, userId, members) {
-  return Boolean(getUserChoiceFromDoc(docData, userId, members));
+  return hasUserCompletedAll(docData, userId, members);
+}
+
+export function hasUserCompletedAll(docData, userId, members) {
+  if (!docData || !userId) return false;
+
+  const slot = getPlayerSlot(userId, members);
+  if (docData[`${slot}Completed`]) return true;
+
+  const answers = getUserAnswersMap(docData, userId, members);
+  if (Object.keys(answers).length) {
+    return countAnswers(answers) >= getQuestionCount(docData);
+  }
+
+  return Boolean(docData[`${slot}Choice`]);
+}
+
+export function getUserAnsweredCount(docData, userId, members) {
+  const answers = getUserAnswersMap(docData, userId, members);
+  if (Object.keys(answers).length) {
+    return countAnswers(answers);
+  }
+  return hasUserCompletedAll(docData, userId, members) ? 1 : 0;
+}
+
+export function computeMatchCount(player1Answers, player2Answers, questionCount) {
+  let matches = 0;
+  for (let i = 0; i < questionCount; i += 1) {
+    const key = String(i);
+    const left = player1Answers?.[key];
+    const right = player2Answers?.[key];
+    if (left && right && left === right) {
+      matches += 1;
+    }
+  }
+  return matches;
 }
 
 export function canRevealWhoMoreLikely(docData, userId, members) {
-  if (!docData?.bothAnswered) return false;
-  return Boolean(
-    getUserChoiceFromDoc(docData, userId, members) &&
-      getPartnerChoiceFromDoc(docData, userId, members)
-  );
+  if (!docData) return false;
+
+  if (docData.bothCompleted) {
+    return (
+      hasUserCompletedAll(docData, userId, members) &&
+      getUserAnsweredCount(docData, userId, members) > 0
+    );
+  }
+
+  if (docData.bothAnswered) {
+    return Boolean(
+      getUserChoiceFromDoc(docData, userId, members) &&
+        getPartnerChoiceFromDoc(docData, userId, members)
+    );
+  }
+
+  return false;
 }
 
 export function choicesAgree(docData) {
+  if (!docData) return false;
+  if (typeof docData.matchCount === 'number') {
+    return docData.matchCount === getQuestionCount(docData);
+  }
   if (!docData?.player1Choice || !docData?.player2Choice) return false;
   return docData.player1Choice === docData.player2Choice;
+}
+
+export function getMatchCountFromDoc(docData) {
+  if (!docData) return 0;
+  if (typeof docData.matchCount === 'number') return docData.matchCount;
+  return choicesAgree(docData) ? 1 : 0;
 }
 
 export function getUserArgumentFromDoc(docData, userId, members) {
@@ -104,11 +210,11 @@ export function subscribeToWhoMoreLikely(coupleId, dateKey, callback, onError) {
   );
 }
 
-export async function submitWhoMoreLikelyChoice(
+export async function submitWhoMoreLikelyAnswer(
   coupleId,
   userId,
   members,
-  { question, choice }
+  { questions, questionIndex, choice }
 ) {
   if (isGuestCoupleId(coupleId)) {
     showGuestSignupPrompt();
@@ -129,25 +235,50 @@ export async function submitWhoMoreLikelyChoice(
     const snap = await getDoc(ref);
     const existing = snap.exists() ? snap.data() : {};
     const sortedMembers = [...memberList].sort();
+    const sessionQuestions = getSessionQuestions(existing, questions);
+    const questionCount = sessionQuestions.length || WHO_MORE_LIKELY_BATCH_SIZE;
+    const answersField = getAnswersField(slot);
 
-    const player1Choice =
-      slot === 'player1' ? pickedUserId : existing.player1Choice || null;
-    const player2Choice =
-      slot === 'player2' ? pickedUserId : existing.player2Choice || null;
+    const updatedAnswers = {
+      ...normalizeAnswersMap(existing[answersField]),
+      [String(questionIndex)]: pickedUserId,
+    };
 
-    const bothAnswered = Boolean(player1Choice && player2Choice);
-    const agreed = bothAnswered ? player1Choice === player2Choice : false;
+    const player1Answers =
+      slot === 'player1'
+        ? updatedAnswers
+        : normalizeAnswersMap(existing.player1Answers);
+    const player2Answers =
+      slot === 'player2'
+        ? updatedAnswers
+        : normalizeAnswersMap(existing.player2Answers);
+
+    const player1Completed = countAnswers(player1Answers) >= questionCount;
+    const player2Completed = countAnswers(player2Answers) >= questionCount;
+    const bothCompleted = player1Completed && player2Completed;
+
+    let matchCount = existing.matchCount ?? null;
+    let agreed = existing.agreed ?? false;
+    if (bothCompleted) {
+      matchCount = computeMatchCount(player1Answers, player2Answers, questionCount);
+      agreed = matchCount === questionCount;
+    }
 
     await setDoc(
       ref,
       {
-        question: question || existing.question,
+        questions: sessionQuestions,
+        questionCount,
         dateKey,
         player1Id: sortedMembers[0] || existing.player1Id || null,
         player2Id: sortedMembers[1] || existing.player2Id || null,
-        player1Choice,
-        player2Choice,
-        bothAnswered,
+        player1Answers,
+        player2Answers,
+        player1Completed,
+        player2Completed,
+        bothCompleted,
+        bothAnswered: bothCompleted,
+        matchCount,
         agreed,
         updatedAt: serverTimestamp(),
       },
@@ -157,16 +288,36 @@ export async function submitWhoMoreLikelyChoice(
     return {
       dateKey,
       slot,
-      bothAnswered,
+      questionIndex,
+      questionCount,
+      player1Answers,
+      player2Answers,
+      player1Completed,
+      player2Completed,
+      bothCompleted,
+      bothAnswered: bothCompleted,
+      matchCount,
       agreed,
-      player1Choice,
-      player2Choice,
-      question: question || existing.question,
+      questions: sessionQuestions,
     };
   } catch (error) {
-    console.warn('submitWhoMoreLikelyChoice failed:', error.message);
+    console.warn('submitWhoMoreLikelyAnswer failed:', error.message);
     throw error;
   }
+}
+
+export async function submitWhoMoreLikelyChoice(
+  coupleId,
+  userId,
+  members,
+  { question, choice, questions = getTodayWhoMoreLikelyQuestions() }
+) {
+  return submitWhoMoreLikelyAnswer(coupleId, userId, members, {
+    questions,
+    questionIndex: 0,
+    choice,
+    question,
+  });
 }
 
 export async function saveWhoMoreLikelyArgument(
@@ -210,7 +361,7 @@ export async function saveWhoMoreLikelyArgument(
 
 export async function finalizeWhoMoreLikelyRound(coupleId, dateKey, docData) {
   try {
-    if (!coupleId || !dateKey || !docData?.bothAnswered) return null;
+    if (!coupleId || !dateKey || !docData) return null;
 
     const sessionRef = getWhoMoreLikelyDocRef(coupleId, dateKey);
 
@@ -221,7 +372,7 @@ export async function finalizeWhoMoreLikelyRound(coupleId, dateKey, docData) {
         if (existingSession?.finalized) {
           return existingSession.statsSnapshot || null;
         }
-        if (existingSession?.player1Choice && existingSession?.player2Choice) {
+        if (existingSession?.bothCompleted || existingSession?.bothAnswered) {
           docData = { ...docData, ...existingSession };
         }
       }
@@ -233,20 +384,32 @@ export async function finalizeWhoMoreLikelyRound(coupleId, dateKey, docData) {
       return docData.statsSnapshot || null;
     }
 
-    const agreed = choicesAgree(docData);
-    const coupleRef = doc(db, 'couples', coupleId);
+    const questionCount = getQuestionCount(docData);
+    const matchCount =
+      typeof docData.matchCount === 'number'
+        ? docData.matchCount
+        : computeMatchCount(
+            docData.player1Answers,
+            docData.player2Answers,
+            questionCount
+          );
 
+    const coupleRef = doc(db, 'couples', coupleId);
     const coupleSnap = await getDoc(coupleRef);
     const existing = coupleSnap.data()?.whoMoreLikelyStats || {};
     const totalPlayed = (existing.totalPlayed || 0) + 1;
-    const agreedCount = (existing.agreedCount || 0) + (agreed ? 1 : 0);
+    const agreedCount = (existing.agreedCount || 0) + matchCount;
+    const totalQuestions = (existing.totalQuestions || 0) + questionCount;
     const agreementPercent =
-      totalPlayed > 0 ? Math.round((agreedCount / totalPlayed) * 100) : 0;
+      totalQuestions > 0 ? Math.round((agreedCount / totalQuestions) * 100) : 0;
 
     const statsSnapshot = {
       totalPlayed,
       agreedCount,
+      totalQuestions,
       agreementPercent,
+      lastMatchCount: matchCount,
+      lastQuestionCount: questionCount,
       lastPlayedAt: new Date().toISOString(),
     };
 
@@ -261,8 +424,11 @@ export async function finalizeWhoMoreLikelyRound(coupleId, dateKey, docData) {
       console.warn('finalizeWhoMoreLikelyRound couple update failed:', coupleError.message);
     }
 
+    const agreed = matchCount === questionCount;
+
     try {
       await updateDoc(sessionRef, {
+        matchCount,
         agreed,
         finalized: true,
         statsSnapshot,
@@ -271,7 +437,7 @@ export async function finalizeWhoMoreLikelyRound(coupleId, dateKey, docData) {
     } catch (sessionError) {
       await setDoc(
         sessionRef,
-        { agreed, finalized: true, statsSnapshot, updatedAt: serverTimestamp() },
+        { matchCount, agreed, finalized: true, statsSnapshot, updatedAt: serverTimestamp() },
         { merge: true }
       );
     }

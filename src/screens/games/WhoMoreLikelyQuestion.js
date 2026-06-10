@@ -19,26 +19,33 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AuthContext } from '../../context/AuthContext';
 import AvatarCircle from '../../components/AvatarCircle';
+import ProgressBar from '../../components/ProgressBar';
 import PulsingPromptCard from '../../components/whoMoreLikely/PulsingPromptCard';
 import WhoMoreLikelyLoader from '../../components/whoMoreLikely/WhoMoreLikelyLoader';
 import AnimatedDots from '../../components/whoMoreLikely/AnimatedDots';
 import { COLORS, GRADIENTS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
-import { getTodayWhoMoreLikelyQuestion } from '../../constants/gameData';
+import {
+  getTodayWhoMoreLikelyQuestions,
+  WHO_MORE_LIKELY_BATCH_SIZE,
+} from '../../constants/gameData';
 import { useCouple } from '../../hooks/useCouple';
 import { saveGameSession, getCoupleMemberIds } from '../../utils/firebase';
 import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
 import { getDateKey } from '../../utils/points';
 import {
   subscribeToWhoMoreLikely,
-  submitWhoMoreLikelyChoice,
-  hasUserAnswered,
-  getUserChoiceFromDoc,
-  getPartnerChoiceFromDoc,
+  submitWhoMoreLikelyAnswer,
+  hasUserCompletedAll,
+  getUserAnswersMap,
+  getPartnerAnswersMap,
+  getUserAnsweredCount,
   canRevealWhoMoreLikely,
+  getSessionQuestions,
+  getQuestionCount,
+  getMatchCountFromDoc,
   stripQuestionPrefix,
-  userIdToDisplayName,
 } from '../../utils/whoMoreLikely';
 
 const PARTNER_GRADIENT = ['#C084FC', '#9B7EDE'];
@@ -132,9 +139,10 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
   const { profile } = useContext(AuthContext);
   const { couple, loading: coupleLoading } = useCouple();
 
-  const question = useMemo(() => getTodayWhoMoreLikelyQuestion(), []);
-  const promptText = useMemo(() => stripQuestionPrefix(question), [question]);
+  const questions = useMemo(() => getTodayWhoMoreLikelyQuestions(), []);
+  const questionCount = questions.length || WHO_MORE_LIKELY_BATCH_SIZE;
 
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedChoice, setSelectedChoice] = useState(null);
   const [waiting, setWaiting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -195,27 +203,25 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
       const memberList = resolveMemberList();
       if (!canRevealWhoMoreLikely(docData, profile.uid, memberList)) return;
 
-      const userChoice = getUserChoiceFromDoc(docData, profile.uid, memberList);
-      const partnerChoice = getPartnerChoiceFromDoc(docData, profile.uid, memberList);
-
-      if (!userChoice || !partnerChoice) return;
-
       navigatedRef.current = true;
+
+      const sessionQuestions = getSessionQuestions(docData, questions);
 
       try {
         navigation.navigate('WhoMoreLikelyReveal', {
-          question: docData.question || question,
+          questions: sessionQuestions,
           dateKey: docData.dateKey || getDateKey(),
-          userChoice,
-          partnerChoice,
-          agreed: docData.player1Choice === docData.player2Choice,
+          userAnswers: getUserAnswersMap(docData, profile.uid, memberList),
+          partnerAnswers: getPartnerAnswersMap(docData, profile.uid, memberList),
+          matchCount: getMatchCountFromDoc(docData),
+          questionCount: getQuestionCount(docData),
         });
       } catch (error) {
         navigatedRef.current = false;
         console.warn('Navigate to reveal failed:', error.message);
       }
     },
-    [navigation, profile?.uid, resolveMemberList, question]
+    [navigation, profile?.uid, resolveMemberList, questions]
   );
 
   useEffect(() => {
@@ -237,14 +243,20 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
           setDocReady(true);
           const memberList = resolveMemberList();
 
-          if (docData && hasUserAnswered(docData, profile.uid, memberList)) {
-            setWaiting(true);
-            const pickedId = getUserChoiceFromDoc(docData, profile.uid, memberList);
-            setSelectedChoice(pickedId === profile.uid ? 'self' : 'partner');
-          }
+          if (docData) {
+            const answeredCount = getUserAnsweredCount(docData, profile.uid, memberList);
+            const completed = hasUserCompletedAll(docData, profile.uid, memberList);
 
-          if (canRevealWhoMoreLikely(docData, profile.uid, memberList)) {
-            navigateToReveal(docData);
+            if (completed) {
+              setWaiting(true);
+              setCurrentIndex(questionCount);
+            } else if (answeredCount > 0) {
+              setCurrentIndex(Math.min(answeredCount, questionCount - 1));
+            }
+
+            if (canRevealWhoMoreLikely(docData, profile.uid, memberList)) {
+              navigateToReveal(docData);
+            }
           }
         } catch (callbackError) {
           console.warn('Who more likely snapshot handler failed:', callbackError.message);
@@ -260,7 +272,13 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
       active = false;
       unsubscribe();
     };
-  }, [profile?.coupleId, profile?.uid, navigateToReveal, resolveMemberList]);
+  }, [
+    profile?.coupleId,
+    profile?.uid,
+    navigateToReveal,
+    resolveMemberList,
+    questionCount,
+  ]);
 
   const handleChoice = async (choice) => {
     if (waiting || submitting || selectedChoice) return;
@@ -275,40 +293,50 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
 
     try {
       const memberList = resolveMemberList();
-      const result = await submitWhoMoreLikelyChoice(
+      const result = await submitWhoMoreLikelyAnswer(
         profile.coupleId,
         profile.uid,
         memberList,
-        { question, choice }
+        { questions, questionIndex: currentIndex, choice }
       );
-
-      try {
-        await saveGameSession(profile.coupleId, 'who-more-likely', {
-          question,
-          choice,
-          userId: profile.uid,
-          dateKey: getDateKey(),
-        });
-      } catch (sessionError) {
-        console.warn('saveGameSession failed:', sessionError.message);
-      }
-
-      try {
-        await notifyPartner(profile, NOTIFICATION_TYPES.WHO_MORE_LIKELY, { question });
-      } catch (notifyError) {
-        console.warn('Partner notification failed:', notifyError.message);
-      }
 
       if (!isMounted.current) return;
 
-      setWaiting(true);
+      const isLastQuestion = currentIndex >= questionCount - 1;
 
-      if (result?.bothAnswered) {
-        navigateToReveal({
-          ...result,
-          question: result.question || question,
-          dateKey: result.dateKey || getDateKey(),
-        });
+      if (isLastQuestion) {
+        try {
+          await saveGameSession(profile.coupleId, 'who-more-likely', {
+            questions,
+            questionCount,
+            userId: profile.uid,
+            dateKey: getDateKey(),
+            completed: true,
+          });
+        } catch (sessionError) {
+          console.warn('saveGameSession failed:', sessionError.message);
+        }
+
+        try {
+          await notifyPartner(profile, NOTIFICATION_TYPES.WHO_MORE_LIKELY, {
+            question: `Finished all ${questionCount} questions`,
+          });
+        } catch (notifyError) {
+          console.warn('Partner notification failed:', notifyError.message);
+        }
+
+        setWaiting(true);
+        setCurrentIndex(questionCount);
+
+        if (result?.bothCompleted) {
+          navigateToReveal({
+            ...result,
+            dateKey: result.dateKey || getDateKey(),
+          });
+        }
+      } else {
+        setCurrentIndex((prev) => prev + 1);
+        setSelectedChoice(null);
       }
     } catch (error) {
       if (isMounted.current) {
@@ -325,22 +353,19 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
   const userName = profile?.name || 'You';
   const partnerName = profile?.partnerName || 'Partner';
   const memberList = resolveMemberList();
-  const pickedDisplayName = userIdToDisplayName(
-    selectedChoice === 'self'
-      ? profile?.uid
-      : memberList.find((id) => id !== profile?.uid),
-    profile?.uid,
-    memberList,
-    userName,
-    partnerName
-  );
-
-  const screenLoading = coupleLoading || (Boolean(profile?.coupleId) && !docReady);
+  const activeQuestion = questions[currentIndex] || questions[0];
+  const promptText = stripQuestionPrefix(activeQuestion);
   const displayPrompt = promptText
     ? promptText.endsWith('?')
       ? promptText
       : `${promptText}?`
     : 'pick someone?';
+
+  const progressValue = waiting
+    ? questionCount
+    : Math.min(currentIndex + 1, questionCount);
+
+  const screenLoading = coupleLoading || (Boolean(profile?.coupleId) && !docReady);
 
   if (screenLoading) {
     return (
@@ -368,6 +393,55 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
             <View style={styles.headerSpacer} />
           </View>
           <WhoMoreLikelyLoader />
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  if (waiting) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.orbPink} pointerEvents="none" />
+        <View style={styles.orbPurple} pointerEvents="none" />
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => {
+                try {
+                  navigation.goBack();
+                } catch (error) {
+                  console.warn('goBack failed:', error.message);
+                }
+              }}
+              style={styles.backBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Text style={styles.backArrow}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              Who&apos;s More Likely
+            </Text>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <View style={styles.waitingScreen}>
+            <Text style={styles.doneEmoji}>✅</Text>
+            <Text style={styles.doneTitle}>All {questionCount} answered!</Text>
+            <Text style={styles.doneSubtitle}>
+              Your picks are saved. Come back anytime — we&apos;ll reveal results once{' '}
+              {partnerName} finishes their set too.
+            </Text>
+
+            <View style={styles.waitingBlock}>
+              <PulsingAvatar name={partnerName} gradient={PARTNER_GRADIENT} />
+              <View style={styles.waitingTextRow}>
+                <Text style={styles.waitingText} numberOfLines={1}>
+                  Waiting for {partnerName}
+                </Text>
+                <AnimatedDots />
+              </View>
+            </View>
+          </View>
         </SafeAreaView>
       </View>
     );
@@ -403,6 +477,16 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.progressBlock}>
+            <Text style={styles.progressLabel}>
+              Question {currentIndex + 1} of {questionCount}
+            </Text>
+            <ProgressBar
+              progress={progressValue / questionCount}
+              style={styles.progressBar}
+            />
+          </View>
+
           <PulsingPromptCard
             label="Who's more likely to..."
             prompt={displayPrompt}
@@ -427,19 +511,10 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
             />
           </View>
 
-          {waiting && (
-            <View style={styles.waitingBlock}>
-              <PulsingAvatar name={partnerName} gradient={PARTNER_GRADIENT} />
-              <View style={styles.waitingTextRow}>
-                <Text style={styles.waitingText} numberOfLines={1}>
-                  Waiting for {partnerName}
-                </Text>
-                <AnimatedDots />
-              </View>
-              <Text style={styles.waitingHint} numberOfLines={3}>
-                You picked {pickedDisplayName}. Reveal unlocks when they choose.
-              </Text>
-            </View>
+          {currentIndex > 0 && (
+            <Text style={styles.resumeHint}>
+              Pick saved as you go — close the app anytime and resume later.
+            </Text>
           )}
         </ScrollView>
       </SafeAreaView>
@@ -506,6 +581,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: SCREEN_PADDING,
     paddingBottom: 24,
   },
+  progressBlock: {
+    marginBottom: 16,
+  },
+  progressLabel: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: COLORS.purple,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+  },
   choices: {
     gap: 12,
   },
@@ -547,9 +636,44 @@ const styles = StyleSheet.create({
   choiceNameSelected: {
     color: '#FFFFFF',
   },
+  resumeHint: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  waitingScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SCREEN_PADDING,
+    paddingBottom: 40,
+  },
+  doneEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  doneTitle: {
+    fontFamily: FONTS.displayItalic,
+    fontSize: 24,
+    color: COLORS.navy,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  doneSubtitle: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 28,
+    paddingHorizontal: 8,
+  },
   waitingBlock: {
     alignItems: 'center',
-    marginTop: 24,
     paddingHorizontal: 4,
   },
   waitingTextRow: {
@@ -564,14 +688,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.navy,
     flexShrink: 1,
-  },
-  waitingHint: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 18,
-    paddingHorizontal: 4,
   },
 });
