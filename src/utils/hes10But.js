@@ -163,6 +163,90 @@ export function findAwaitingRoundForCreator(rounds, userId) {
   );
 }
 
+export function findRatedRoundForCreator(rounds, userId) {
+  if (!userId || !Array.isArray(rounds)) return null;
+  const sorted = sortRoundsByDate(rounds);
+  return (
+    sorted.find(
+      (round) =>
+        round?.creatorId === userId &&
+        round?.partnerRating != null &&
+        round?.status === 'rated'
+    ) || null
+  );
+}
+
+export function findRatedRoundForRater(rounds, userId) {
+  if (!userId || !Array.isArray(rounds)) return null;
+  const sorted = sortRoundsByDate(rounds);
+  return (
+    sorted.find(
+      (round) =>
+        round?.raterId === userId &&
+        round?.partnerRating != null &&
+        round?.status === 'rated'
+    ) || null
+  );
+}
+
+export function getHes10NavigationTarget(rounds, userId) {
+  const pending = findPendingRoundForUser(rounds, userId);
+  if (pending?.id) {
+    return {
+      screen: 'Hesa10ButRate',
+      params: { roundId: pending.id, prompt: pending.fullSentence },
+    };
+  }
+
+  const creatorReveal = findRatedRoundForCreator(rounds, userId);
+  if (creatorReveal?.id) {
+    return {
+      screen: 'Hesa10ButReveal',
+      params: {
+        roundId: creatorReveal.id,
+        fullSentence: creatorReveal.fullSentence,
+        partnerRating: creatorReveal.partnerRating,
+      },
+    };
+  }
+
+  const raterReveal = findRatedRoundForRater(rounds, userId);
+  if (raterReveal?.id) {
+    return {
+      screen: 'Hesa10ButReveal',
+      params: {
+        roundId: raterReveal.id,
+        fullSentence: raterReveal.fullSentence,
+        partnerRating: raterReveal.partnerRating,
+      },
+    };
+  }
+
+  return { screen: 'Hesa10ButCreate', params: {} };
+}
+
+export function getHes10ButStatus(rounds, userId, partnerName) {
+  const pending = findPendingRoundForUser(rounds, userId);
+  if (pending) {
+    return { status: 'rate', label: 'Rate their sentence' };
+  }
+
+  const awaiting = findAwaitingRoundForCreator(rounds, userId);
+  if (awaiting) {
+    return {
+      status: 'waiting',
+      label: `Waiting for ${partnerName || 'partner'}`,
+    };
+  }
+
+  const revealReady = findRatedRoundForCreator(rounds, userId);
+  if (revealReady) {
+    return { status: 'reveal', label: 'See their rating' };
+  }
+
+  return { status: 'play', label: 'Send a sentence' };
+}
+
 export async function createHes10Round(
   coupleId,
   userId,

@@ -56,6 +56,7 @@ export const NOTIFICATION_TYPES = {
   PARTNER_ANSWERED: 'partner_answered',
   WHO_MORE_LIKELY: 'who_more_likely',
   HESA10BUT_SENT: 'hesa10but_sent',
+  HESA10BUT_RATED: 'hesa10but_rated',
   DARE_COMPLETED: 'dare_completed',
   VOICE_BOMB_SENT: 'voice_bomb_sent',
   VOICE_BOMB_REPLY: 'voice_bomb_reply',
@@ -64,6 +65,7 @@ export const NOTIFICATION_TYPES = {
   STREAK_RISK: 'streak_risk',
   STREAK_MILESTONE: 'streak_milestone',
   POINTS_UNLOCK: 'points_unlock',
+  SURPRISE_SENT: 'surprise_sent',
 };
 
 export const DAILY_QUESTION_REMINDER_ID = 'daily-question-8pm';
@@ -95,6 +97,8 @@ export function buildNotificationContent(type, data = {}) {
       return { title: 'VowFinity', body: `${name} just answered — who did they pick? 👀` };
     case NOTIFICATION_TYPES.HESA10BUT_SENT:
       return { title: 'VowFinity', body: `${name} has something to say about you 💅` };
+    case NOTIFICATION_TYPES.HESA10BUT_RATED:
+      return { title: 'VowFinity', body: `${name} rated your sentence — see the score 💅` };
     case NOTIFICATION_TYPES.DARE_COMPLETED:
       return { title: 'VowFinity', body: `${name} just did something for you today 💝` };
     case NOTIFICATION_TYPES.VOICE_BOMB_SENT:
@@ -117,6 +121,11 @@ export function buildNotificationContent(type, data = {}) {
       };
     case NOTIFICATION_TYPES.POINTS_UNLOCK:
       return { title: 'VowFinity', body: `You unlocked ${featureName} ✨` };
+    case NOTIFICATION_TYPES.SURPRISE_SENT:
+      return {
+        title: 'VowFinity',
+        body: `${name} is planning a surprise for you ✨`,
+      };
     default:
       return { title: 'VowFinity', body: data.body || 'You have a new update 💕' };
   }
@@ -132,6 +141,15 @@ export function getScreenForNotificationType(type, data = {}) {
       return { name: 'WhoMoreLikelyQuestion', params: data };
     case NOTIFICATION_TYPES.HESA10BUT_SENT:
       return { name: 'Hesa10ButRate', params: { roundId: data.roundId, prompt: data.prompt } };
+    case NOTIFICATION_TYPES.HESA10BUT_RATED:
+      return {
+        name: 'Hesa10ButReveal',
+        params: {
+          roundId: data.roundId,
+          fullSentence: data.prompt,
+          partnerRating: data.partnerRating,
+        },
+      };
     case NOTIFICATION_TYPES.DARE_COMPLETED:
       return { name: 'DareDropReaction', params: { dareDropId: data.dareDropId, dare: data.dare } };
     case NOTIFICATION_TYPES.VOICE_BOMB_SENT:

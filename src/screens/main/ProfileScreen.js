@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,11 +13,13 @@ import { AuthContext } from '../../context/AuthContext';
 import { auth, signOut } from '../../utils/firebase';
 import { useCouple } from '../../hooks/useCouple';
 import UnlocksSection from '../../components/UnlocksSection';
+import NotificationInbox from '../../components/NotificationInbox';
 import { getLevel, getProgressToNextLevel, formatPoints, getStreakCount, getFreezeTokens } from '../../utils/points';
 
 export default function ProfileScreen() {
   const { user, profile, isGuest, exitGuestMode } = useContext(AuthContext);
   const { couple, loading, error } = useCouple();
+  const [inboxVisible, setInboxVisible] = useState(false);
 
   if (loading) {
     return (
@@ -115,6 +117,17 @@ export default function ProfileScreen() {
           <UnlocksSection couple={couple} />
 
           <View style={[styles.menuCard, SHADOWS.card]}>
+            {!isGuest && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => setInboxVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.menuEmoji}>🔔</Text>
+                <Text style={styles.menuLabel}>Notifications</Text>
+                <Text style={styles.menuValue}>View history</Text>
+              </TouchableOpacity>
+            )}
             <MenuItem emoji="💑" label="Partner" value={profile?.partnerName} />
             <MenuItem emoji="📅" label="Together since" value={profile?.startDate} />
             <MenuItem emoji="🔗" label="Invite code" value={profile?.inviteCode} />
@@ -124,6 +137,7 @@ export default function ProfileScreen() {
             <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
         </ScrollView>
+        <NotificationInbox visible={inboxVisible} onClose={() => setInboxVisible(false)} />
       </SafeAreaView>
     </LinearGradient>
   );

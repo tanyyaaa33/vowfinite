@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, GRADIENTS } from '../constants/colors';
 import { FONTS } from '../constants/fonts';
@@ -25,9 +25,20 @@ export default function UnlocksSection({ couple }) {
         const progress = Math.min(points / unlock.points, 1);
         const isLast = index === UNLOCKS.length - 1;
 
+        const handlePress = () => {
+          if (unlocked) {
+            Alert.alert(
+              unlock.title,
+              'This reward is coming soon in a future update. You\'ve earned it — we\'ll notify you when it launches!'
+            );
+          }
+        };
+
         return (
-          <View
+          <TouchableOpacity
             key={unlock.id}
+            activeOpacity={unlocked ? 0.8 : 1}
+            onPress={unlocked ? handlePress : undefined}
             style={[styles.row, unlocked && styles.rowUnlocked, isLast && styles.rowLast]}
           >
             <Text style={styles.emoji}>{unlock.emoji}</Text>
@@ -52,7 +63,7 @@ export default function UnlocksSection({ couple }) {
             <Text style={[styles.pointsLabel, unlocked && styles.unlockedLabel]}>
               {unlocked ? '✓' : `${unlock.points}`}
             </Text>
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>

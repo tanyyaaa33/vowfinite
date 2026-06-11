@@ -229,7 +229,12 @@ export default function VoiceBombReply({ route, navigation }) {
       });
 
       try {
-        await completeGame(POINTS.VOICE_BOMB, 'voice-bomb-reply', '🎙️');
+        await completeGame(
+          POINTS.VOICE_BOMB_REPLY,
+          'voice-bomb-reply',
+          '🎙️',
+          `voice-bomb-reply_${voiceBombId}`
+        );
       } catch (pointsError) {
         console.warn('Reply points failed:', pointsError.message);
       }

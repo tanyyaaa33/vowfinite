@@ -1,7 +1,7 @@
 import { useContext, useCallback, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { usePointsToast } from '../components/PointsToast';
-import { completeGameActivity } from '../utils/points';
+import { completeGameActivity, POINTS } from '../utils/points';
 import { sendUnlockNotification, notifyPartner, NOTIFICATION_TYPES } from '../utils/notifications';
 
 export function useGameCompletion() {
@@ -10,7 +10,7 @@ export function useGameCompletion() {
   const hasCompleted = useRef(false);
 
   const completeGame = useCallback(
-    async (points, action, suffix = '⭐') => {
+    async (points, action, suffix = '⭐', dedupKey = null) => {
       if (hasCompleted.current) return null;
       hasCompleted.current = true;
       if (!profile?.coupleId) {
@@ -19,8 +19,22 @@ export function useGameCompletion() {
       }
 
       try {
-        const result = await completeGameActivity(profile.coupleId, points, action);
+        const result = await completeGameActivity(
+          profile.coupleId,
+          points,
+          action,
+          dedupKey
+        );
+
+        if (result?.alreadyAwarded) {
+          return result;
+        }
+
         showPoints(points, suffix);
+
+        if (result?.syncBonus?.newPoints) {
+          showPoints(POINTS.PARTNER_SYNC, '🤝');
+        }
 
         if (result?.newUnlocks?.length) {
           for (const unlock of result.newUnlocks) {

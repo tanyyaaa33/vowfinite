@@ -193,7 +193,12 @@ export default function DareDropComplete({ route, navigation }) {
       if (!pointsAwarded.current) {
         pointsAwarded.current = true;
         try {
-          await completeGame(POINTS.DARE_DROP, 'dare-drop', '✨');
+          await completeGame(
+            POINTS.DARE_DROP,
+            'dare-drop',
+            '✨',
+            `dare-drop_${dareDropId}`
+          );
         } catch (pointsError) {
           console.warn('Dare points failed:', pointsError.message);
           if (isMounted.current) {

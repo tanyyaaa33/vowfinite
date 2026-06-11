@@ -110,7 +110,7 @@ export default function VoiceBombRecord({ navigation }) {
       );
 
       try {
-        await completeGame(POINTS.VOICE_BOMB, 'voice-bomb', '🎙️');
+        await completeGame(POINTS.VOICE_BOMB, 'voice-bomb', '🎙️', `voice-bomb_${voiceBombId}`);
       } catch (pointsError) {
         console.warn('Voice bomb points failed:', pointsError.message);
       }

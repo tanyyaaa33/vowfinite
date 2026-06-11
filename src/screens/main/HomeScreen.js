@@ -15,6 +15,8 @@ import { SCREEN_PADDING } from '../../constants/layout';
 import { GAMES, getTodayDailyQuestion } from '../../constants/gameData';
 import { AuthContext } from '../../context/AuthContext';
 import { useCouple } from '../../hooks/useCouple';
+import { useGamesHub } from '../../hooks/useGamesHub';
+import { getGameNavigationTarget } from '../../utils/gameNavigation';
 import {
   getLevel,
   getProgressToNextLevel,
@@ -37,6 +39,7 @@ function daysTogether(startDate) {
 export default function HomeScreen({ navigation }) {
   const { profile } = useContext(AuthContext);
   const { couple, loading, error } = useCouple();
+  const { dailyStatus, sessions, hes10Rounds, partnerId } = useGamesHub();
 
   if (loading) {
     return (
@@ -101,7 +104,10 @@ export default function HomeScreen({ navigation }) {
           <View style={[styles.activityCard, SHADOWS.card]}>
             <Text style={styles.activityTitle}>Today's Activities</Text>
             <Text style={styles.activityDesc}>
-              Complete {ACTIVITIES_REQUIRED} to keep your streak alive
+              Complete {ACTIVITIES_REQUIRED} game activities today to keep your streak alive
+            </Text>
+            <Text style={styles.activityHint}>
+              Any game counts — Daily Question, Who&apos;s More Likely, Voice Bomb, and more
             </Text>
             <View style={styles.activityDots}>
               {Array.from({ length: ACTIVITIES_REQUIRED }).map((_, i) => (
@@ -133,13 +139,24 @@ export default function HomeScreen({ navigation }) {
 
           <Text style={styles.sectionTitle}>Today's Connection</Text>
           <TouchableOpacity
-            onPress={() => navigation.navigate('DailyQuestionAnswer')}
+            onPress={() => {
+              const target = getGameNavigationTarget('daily-question', {
+                sessions,
+                hes10Rounds,
+                userId: profile?.uid,
+                partnerId,
+                partnerName: profile?.partnerName,
+              });
+              navigation.navigate(target.screen, target.params || {});
+            }}
             activeOpacity={0.85}
             style={[styles.dailyCard, SHADOWS.card]}
           >
             <Text style={styles.dailyLabel}>Daily Question</Text>
             <Text style={styles.dailyQuestion}>{dailyQuestion}</Text>
-            <Text style={styles.dailyCta}>Tap to answer →</Text>
+            <Text style={styles.dailyCta}>
+              {dailyStatus?.label || 'Tap to answer'} →
+            </Text>
           </TouchableOpacity>
 
           <Text style={styles.sectionTitle}>Quick Play</Text>
@@ -152,7 +169,20 @@ export default function HomeScreen({ navigation }) {
               timesPlayed={game.timesPlayed}
               isNew={game.isNew}
               hasNotification={game.hasNotification}
-              onPress={() => navigation.navigate(game.screens[0])}
+              onPress={() => {
+                const target = getGameNavigationTarget(game.id, {
+                  sessions,
+                  hes10Rounds,
+                  userId: profile?.uid,
+                  partnerId,
+                  partnerName: profile?.partnerName,
+                });
+                if (target?.screen) {
+                  navigation.navigate(target.screen, target.params || {});
+                } else {
+                  navigation.navigate(game.screens[0]);
+                }
+              }}
             />
           ))}
         </ScrollView>
@@ -224,7 +254,14 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     fontSize: 13,
     color: COLORS.textMuted,
+    marginBottom: 6,
+  },
+  activityHint: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: COLORS.textMuted,
     marginBottom: 12,
+    lineHeight: 17,
   },
   activityDots: {
     flexDirection: 'row',

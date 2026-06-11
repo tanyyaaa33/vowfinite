@@ -229,7 +229,12 @@ export default function Hesa10ButReveal({ route, navigation }) {
 
     (async () => {
       try {
-        await completeGame(POINTS.HES10, 'hes-a-10-but');
+        await completeGame(
+          POINTS.HES10,
+          'hes-a-10-but',
+          '✨',
+          `hes-a-10-but_${roundId}`
+        );
         if (active && isMounted.current) {
           showPoints(POINTS.HES10, '✨');
         }

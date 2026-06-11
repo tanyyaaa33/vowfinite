@@ -27,7 +27,14 @@ import {
 } from '../../constants/gameData';
 import { useCouple } from '../../hooks/useCouple';
 import { saveGameSession } from '../../utils/firebase';
-import { deductPoints, POINTS, formatPoints } from '../../utils/points';
+import {
+  deductPoints,
+  POINTS,
+  formatPoints,
+  canSkipDare,
+  recordDareSkip,
+  DARE_SKIPS_PER_WEEK,
+} from '../../utils/points';
 import {
   subscribeToDareDropHistory,
   createDareDropOffer,
@@ -271,11 +278,29 @@ export default function DareDropDare({ navigation }) {
   const handleSkipConfirm = async () => {
     if (skipping || !dareDropId) return;
 
+    if (profile?.coupleId) {
+      const skipCheck = await canSkipDare(profile.coupleId);
+      if (!skipCheck.allowed) {
+        Alert.alert(
+          'Skip limit reached',
+          `You can skip up to ${DARE_SKIPS_PER_WEEK} dares per week.`
+        );
+        setSkipSheetVisible(false);
+        return;
+      }
+    }
+
     setSkipSheetVisible(false);
     setSkipping(true);
 
     try {
       if (profile?.coupleId) {
+        try {
+          await recordDareSkip(profile.coupleId);
+        } catch (recordError) {
+          console.warn('recordDareSkip failed:', recordError.message);
+        }
+
         try {
           await skipDareDrop(profile.coupleId, dareDropId);
         } catch (skipError) {

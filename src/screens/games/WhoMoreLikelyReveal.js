@@ -28,7 +28,7 @@ import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
 import { WHO_MORE_LIKELY_BATCH_SIZE } from '../../constants/gameData';
-import { POINTS } from '../../utils/points';
+import { POINTS, getDateKey } from '../../utils/points';
 import {
   subscribeToWhoMoreLikely,
   finalizeWhoMoreLikelyRound,
@@ -320,7 +320,12 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
           if (active && snapshot) setStats(snapshot);
         }
 
-        await completeGame(POINTS.WHO_MORE_LIKELY, 'who-more-likely');
+        await completeGame(
+          POINTS.WHO_MORE_LIKELY,
+          'who-more-likely',
+          '✨',
+          `who-more-likely_${getDateKey()}`
+        );
         if (active && isMounted.current) {
           showPoints(POINTS.WHO_MORE_LIKELY, '✨');
         }

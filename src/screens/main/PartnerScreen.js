@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AvatarCircle from '../../components/AvatarCircle';
@@ -12,12 +12,32 @@ import { LOVE_LANGUAGES } from '../../constants/gameData';
 import { getStreakCount } from '../../utils/points';
 import { AuthContext } from '../../context/AuthContext';
 import { useCouple } from '../../hooks/useCouple';
+import { usePartnerProfile } from '../../hooks/usePartnerProfile';
+
+function formatJoinedDate(value) {
+  if (!value) return '—';
+  try {
+    const date =
+      typeof value?.toDate === 'function'
+        ? value.toDate()
+        : new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return '—';
+  }
+}
 
 export default function PartnerScreen() {
   const { profile } = useContext(AuthContext);
   const { couple, loading, error } = useCouple();
+  const { partnerProfile, loading: partnerLoading } = usePartnerProfile();
 
-  if (loading) {
+  if (loading || partnerLoading) {
     return (
       <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
         <SafeAreaView style={styles.safe} edges={['top']}>
@@ -37,8 +57,15 @@ export default function PartnerScreen() {
     );
   }
 
-  const loveLang = LOVE_LANGUAGES.find((l) => l.id === profile?.loveLanguage);
+  const partnerLoveLang = LOVE_LANGUAGES.find(
+    (l) => l.id === partnerProfile?.loveLanguage
+  );
+  const yourLoveLang = LOVE_LANGUAGES.find((l) => l.id === profile?.loveLanguage);
   const partnerConnected = (couple?.members?.length || 0) >= 2;
+  const partnerJoined = formatJoinedDate(
+    partnerProfile?.createdAt || couple?.createdAt
+  );
+  const youJoined = formatJoinedDate(profile?.createdAt);
 
   return (
     <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
@@ -48,9 +75,15 @@ export default function PartnerScreen() {
 
           <View style={[styles.profileCard, SHADOWS.strong]}>
             <LinearGradient colors={GRADIENTS.primary} style={styles.profileGradient}>
-              <AvatarCircle initial={profile?.partnerName} size={88} />
+              {partnerProfile?.avatarUrl ? (
+                <Image source={{ uri: partnerProfile.avatarUrl }} style={styles.avatarImage} />
+              ) : partnerProfile?.avatarEmoji ? (
+                <Text style={styles.avatarEmoji}>{partnerProfile.avatarEmoji}</Text>
+              ) : (
+                <AvatarCircle initial={profile?.partnerName} size={88} />
+              )}
               <Text style={styles.partnerName} numberOfLines={1}>
-                {profile?.partnerName || 'Waiting...'}
+                {partnerProfile?.name || profile?.partnerName || 'Waiting...'}
               </Text>
               <Text style={styles.status}>
                 {partnerConnected ? '💚 Connected' : '⏳ Waiting to join'}
@@ -71,13 +104,25 @@ export default function PartnerScreen() {
             </View>
           </View>
 
-          {loveLang && (
+          {partnerLoveLang && (
+            <View style={[styles.loveCard, SHADOWS.card]}>
+              <Text style={styles.loveTitle}>{profile?.partnerName || 'Partner'}&apos;s Love Language</Text>
+              <View style={styles.loveRow}>
+                <Text style={styles.loveEmoji}>{partnerLoveLang.emoji}</Text>
+                <Text style={styles.loveLabel} numberOfLines={2}>
+                  {partnerLoveLang.label}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {yourLoveLang && (
             <View style={[styles.loveCard, SHADOWS.card]}>
               <Text style={styles.loveTitle}>Your Love Language</Text>
               <View style={styles.loveRow}>
-                <Text style={styles.loveEmoji}>{loveLang.emoji}</Text>
+                <Text style={styles.loveEmoji}>{yourLoveLang.emoji}</Text>
                 <Text style={styles.loveLabel} numberOfLines={2}>
-                  {loveLang.label}
+                  {yourLoveLang.label}
                 </Text>
               </View>
               <Text style={styles.loveHint}>
@@ -98,10 +143,21 @@ export default function PartnerScreen() {
             <View style={styles.timelineItem}>
               <View style={[styles.timelineDot, { backgroundColor: COLORS.purple }]} />
               <View style={styles.timelineContent}>
-                <Text style={styles.timelineEvent}>Joined VowFinity</Text>
-                <Text style={styles.timelineDate}>Today</Text>
+                <Text style={styles.timelineEvent}>You joined VowFinity</Text>
+                <Text style={styles.timelineDate}>{youJoined}</Text>
               </View>
             </View>
+            {partnerConnected && (
+              <View style={styles.timelineItem}>
+                <View style={[styles.timelineDot, { backgroundColor: COLORS.green }]} />
+                <View style={styles.timelineContent}>
+                  <Text style={styles.timelineEvent}>
+                    {profile?.partnerName || 'Partner'} joined VowFinity
+                  </Text>
+                  <Text style={styles.timelineDate}>{partnerJoined}</Text>
+                </View>
+              </View>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -129,6 +185,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 28,
     paddingHorizontal: 20,
+  },
+  avatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  avatarEmoji: {
+    fontSize: 52,
+    marginBottom: 4,
   },
   partnerName: {
     fontFamily: FONTS.display,

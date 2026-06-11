@@ -27,10 +27,8 @@ import {
   buildFullSentence,
   normalizeSentenceSuffix,
   createHes10Round,
-  subscribeToHes10Round,
   subscribeToHes10History,
   findAwaitingRoundForCreator,
-  canShowHes10Reveal,
   MIN_SENTENCE_LENGTH,
 } from '../../utils/hes10But';
 
@@ -47,7 +45,6 @@ export default function Hesa10ButCreate({ navigation }) {
   const [historyReady, setHistoryReady] = useState(false);
 
   const isMounted = useRef(true);
-  const navigatedRef = useRef(false);
   const membersRef = useRef([]);
 
   const fullSentence = useMemo(
@@ -97,26 +94,6 @@ export default function Hesa10ButCreate({ navigation }) {
     return [];
   }, [couple?.members, profile?.uid]);
 
-  const navigateToReveal = useCallback(
-    (roundDoc) => {
-      if (navigatedRef.current || !roundDoc?.id) return;
-      if (!canShowHes10Reveal(roundDoc)) return;
-
-      navigatedRef.current = true;
-      try {
-        navigation.navigate('Hesa10ButReveal', {
-          roundId: roundDoc.id,
-          fullSentence: roundDoc.fullSentence,
-          partnerRating: roundDoc.partnerRating,
-        });
-      } catch (error) {
-        navigatedRef.current = false;
-        console.warn('Navigate to reveal failed:', error.message);
-      }
-    },
-    [navigation]
-  );
-
   useEffect(() => {
     if (!profile?.coupleId || !profile?.uid) {
       setHistoryReady(true);
@@ -158,35 +135,6 @@ export default function Hesa10ButCreate({ navigation }) {
     };
   }, [profile?.coupleId, profile?.uid, waiting, activeRoundId]);
 
-  useEffect(() => {
-    if (!profile?.coupleId || !activeRoundId || !waiting) return undefined;
-
-    let active = true;
-
-    const unsubscribe = subscribeToHes10Round(
-      profile.coupleId,
-      activeRoundId,
-      (roundDoc) => {
-        if (!active || !isMounted.current) return;
-        try {
-          if (canShowHes10Reveal(roundDoc)) {
-            navigateToReveal(roundDoc);
-          }
-        } catch (error) {
-          console.warn('Create round listener failed:', error.message);
-        }
-      },
-      (error) => {
-        console.warn('Create round snapshot error:', error?.message);
-      }
-    );
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [profile?.coupleId, activeRoundId, waiting, navigateToReveal]);
-
   const handleChipPress = (chip) => {
     setSuffix(chip);
   };
@@ -196,6 +144,14 @@ export default function Hesa10ButCreate({ navigation }) {
 
     if (!profile?.coupleId || !profile?.uid) {
       Alert.alert('Connect first', 'Link with your partner to play together.');
+      return;
+    }
+
+    if (waiting) {
+      Alert.alert(
+        'Already sent',
+        'Your partner can rate this one anytime. You\'ll get a notification when they do.'
+      );
       return;
     }
 
@@ -371,23 +327,34 @@ export default function Hesa10ButCreate({ navigation }) {
             {waiting && (
               <View style={styles.waitingBlock}>
                 <Text style={styles.waitingTitle}>Sent to {profile?.partnerName || 'your partner'} 💅</Text>
-                <Text style={styles.waitingHint} numberOfLines={2}>
-                  Waiting for their rating — you&apos;ll see the reveal together.
+                <Text style={styles.waitingHint} numberOfLines={3}>
+                  They can rate it anytime — no need to be online together. We&apos;ll notify you when the score is in.
                 </Text>
               </View>
             )}
           </ScrollView>
 
-          {!waiting && (
-            <View style={styles.footer}>
+          <View style={styles.footer}>
+            {waiting ? (
+              <GradientButton
+                title="Back to Games"
+                onPress={() => {
+                  try {
+                    navigation.navigate('Games');
+                  } catch (error) {
+                    navigation.goBack();
+                  }
+                }}
+              />
+            ) : (
               <GradientButton
                 title={sending ? 'Sending...' : 'Send to Partner'}
                 onPress={handleSend}
                 loading={sending}
                 disabled={!canSend || sending}
               />
-            </View>
-          )}
+            )}
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>

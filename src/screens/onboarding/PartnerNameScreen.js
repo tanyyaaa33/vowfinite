@@ -1,5 +1,14 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  TouchableOpacity,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientButton from '../../components/GradientButton';
@@ -9,16 +18,26 @@ import { FONTS } from '../../constants/fonts';
 import { AuthContext } from '../../context/AuthContext';
 import { saveUserProfile } from '../../utils/firebase';
 
+const PRONOUN_OPTIONS = [
+  { id: 'he', label: 'He / Him' },
+  { id: 'she', label: 'She / Her' },
+  { id: 'they', label: 'They / Them' },
+];
+
 export default function PartnerNameScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [partnerName, setPartnerName] = useState('');
+  const [partnerGender, setPartnerGender] = useState('they');
   const [loading, setLoading] = useState(false);
 
   const handleNext = async () => {
     if (!user?.uid || !partnerName.trim()) return;
     setLoading(true);
     try {
-      await saveUserProfile(user.uid, { partnerName: partnerName.trim() });
+      await saveUserProfile(user.uid, {
+        partnerName: partnerName.trim(),
+        partnerGender,
+      });
       navigation.navigate('StartDate');
     } catch (error) {
       Alert.alert('Error', error.message || 'Could not save partner name.');
@@ -45,6 +64,30 @@ export default function PartnerNameScreen({ navigation }) {
               onChangeText={setPartnerName}
               autoFocus
             />
+
+            <Text style={styles.pronounLabel}>Pronouns (for He&apos;s a 10 But)</Text>
+            <View style={styles.pronounRow}>
+              {PRONOUN_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[
+                    styles.pronounChip,
+                    partnerGender === option.id && styles.pronounChipActive,
+                  ]}
+                  onPress={() => setPartnerGender(option.id)}
+                >
+                  <Text
+                    style={[
+                      styles.pronounChipText,
+                      partnerGender === option.id && styles.pronounChipTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <GradientButton title="Continue" onPress={handleNext} loading={loading} disabled={!partnerName.trim()} style={styles.button} />
           </View>
         </KeyboardAvoidingView>
@@ -90,6 +133,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     textAlign: 'center',
+  },
+  pronounLabel: {
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: 20,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  pronounRow: {
+    gap: 8,
+  },
+  pronounChip: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.cardBg,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  pronounChipActive: {
+    borderColor: COLORS.pink,
+    backgroundColor: '#FFF0F6',
+  },
+  pronounChipText: {
+    fontFamily: FONTS.medium,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  pronounChipTextActive: {
+    color: COLORS.pink,
   },
   button: { marginTop: 28 },
   stepLabel: {

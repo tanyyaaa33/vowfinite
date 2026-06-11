@@ -7,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -19,6 +20,8 @@ import {
   query,
   where,
   getDocs,
+  orderBy,
+  limit,
   serverTimestamp,
   onSnapshot,
 } from 'firebase/firestore';
@@ -67,6 +70,7 @@ export {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   doc,
   setDoc,
   getDoc,
@@ -315,6 +319,44 @@ export function subscribeToCoupleGames(coupleId, callback, onError) {
       callback([]);
     }
   );
+}
+
+export function subscribeToNotifications(userId, callback, onError) {
+  if (!userId) {
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, 'notifications', userId, 'items'),
+    orderBy('createdAt', 'desc'),
+    limit(50)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
+      callback(items);
+    },
+    (error) => {
+      console.warn('subscribeToNotifications error:', error.message);
+      onError?.(error);
+      callback([]);
+    }
+  );
+}
+
+export async function markNotificationRead(userId, notificationId) {
+  try {
+    await updateDoc(doc(db, 'notifications', userId, 'items', notificationId), {
+      read: true,
+    });
+  } catch (error) {
+    console.warn('markNotificationRead failed:', error.message);
+  }
 }
 
 export async function saveGameSession(coupleId, gameId, data) {

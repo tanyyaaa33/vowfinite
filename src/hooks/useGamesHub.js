@@ -3,6 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import { GUEST_PARTNER_ID, GUEST_SESSIONS } from '../constants/guestData';
 import { useCouple } from './useCouple';
 import { subscribeToCoupleGames, getPartnerUserId } from '../utils/firebase';
+import { subscribeToHes10History } from '../utils/hes10But';
 import {
   buildHubGameCards,
   getCoupleTotalPoints,
@@ -17,6 +18,7 @@ export function useGamesHub() {
   const { profile, profileLoading, isGuest } = useContext(AuthContext);
   const { couple, loading: coupleLoading, error: coupleError } = useCouple();
   const [sessions, setSessions] = useState([]);
+  const [hes10Rounds, setHes10Rounds] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(true);
   const [gamesError, setGamesError] = useState(null);
   const [partnerId, setPartnerId] = useState(null);
@@ -95,6 +97,31 @@ export function useGamesHub() {
     };
   }, [profile?.coupleId, isGuest]);
 
+  useEffect(() => {
+    if (isGuest || !profile?.coupleId) {
+      setHes10Rounds([]);
+      return undefined;
+    }
+
+    let isActive = true;
+
+    const unsubscribe = subscribeToHes10History(
+      profile.coupleId,
+      (rounds) => {
+        if (isActive) setHes10Rounds(Array.isArray(rounds) ? rounds : []);
+      },
+      (error) => {
+        console.warn('useGamesHub hes10 listener failed:', error?.message);
+        if (isActive) setHes10Rounds([]);
+      }
+    );
+
+    return () => {
+      isActive = false;
+      unsubscribe();
+    };
+  }, [profile?.coupleId, isGuest]);
+
   const hubData = useMemo(() => {
     try {
       const streak = getStreakCount(couple);
@@ -107,7 +134,10 @@ export function useGamesHub() {
         partnerId,
         profile?.partnerName
       );
-      const games = buildHubGameCards(sessions, profile?.uid, partnerId);
+      const games = buildHubGameCards(sessions, profile?.uid, partnerId, {
+        hes10Rounds,
+        partnerName: profile?.partnerName,
+      });
 
       return {
         streak,
@@ -116,6 +146,7 @@ export function useGamesHub() {
         todayQuestion,
         dailyStatus,
         games,
+        hes10Rounds,
       };
     } catch (error) {
       console.warn('useGamesHub hubData failed:', error.message);
@@ -125,10 +156,13 @@ export function useGamesHub() {
         totalPoints: 0,
         todayQuestion: getTodayQuestion(),
         dailyStatus: EMPTY_DAILY_STATUS,
-        games: buildHubGameCards([], profile?.uid, partnerId),
+        games: buildHubGameCards([], profile?.uid, partnerId, {
+          hes10Rounds: [],
+          partnerName: profile?.partnerName,
+        }),
       };
     }
-  }, [couple, sessions, profile?.uid, profile?.partnerName, partnerId]);
+  }, [couple, sessions, hes10Rounds, profile?.uid, profile?.partnerName, partnerId]);
 
   const hasCouple = Boolean(profile?.coupleId);
   const loading = isGuest
@@ -138,6 +172,7 @@ export function useGamesHub() {
   return {
     ...hubData,
     couple,
+    sessions,
     loading,
     error: coupleError || gamesError,
     partnerId,

@@ -17,6 +17,7 @@ import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
 import { useCouple } from '../../hooks/useCouple';
 import { saveGameSession } from '../../utils/firebase';
+import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
 import {
   subscribeToHes10Round,
   subscribeToHes10History,
@@ -37,13 +38,12 @@ export default function Hesa10ButRate({ route, navigation }) {
   const [submitting, setSubmitting] = useState(false);
 
   const isMounted = useRef(true);
-  const navigatedRef = useRef(false);
   const resolvedRoundId = round?.id || paramRoundId;
+  const alreadyRated = canShowHes10Reveal(round);
 
-  const navigateToReveal = useCallback(
+  const openReveal = useCallback(
     (roundDoc) => {
-      if (navigatedRef.current || !roundDoc?.id) return;
-      navigatedRef.current = true;
+      if (!roundDoc?.id) return;
       try {
         navigation.navigate('Hesa10ButReveal', {
           roundId: roundDoc.id,
@@ -51,7 +51,6 @@ export default function Hesa10ButRate({ route, navigation }) {
           partnerRating: roundDoc.partnerRating,
         });
       } catch (error) {
-        navigatedRef.current = false;
         console.warn('Navigate to reveal failed:', error.message);
       }
     },
@@ -82,9 +81,6 @@ export default function Hesa10ButRate({ route, navigation }) {
           try {
             setRound(doc);
             setRoundReady(true);
-            if (doc && canShowHes10Reveal(doc)) {
-              navigateToReveal(doc);
-            }
           } catch (error) {
             console.warn('Rate round handler failed:', error.message);
             setRoundReady(true);
@@ -127,7 +123,7 @@ export default function Hesa10ButRate({ route, navigation }) {
       active = false;
       unsubscribe();
     };
-  }, [profile?.coupleId, profile?.uid, paramRoundId, navigateToReveal]);
+  }, [profile?.coupleId, profile?.uid, paramRoundId]);
 
   useEffect(() => {
     if (!roundReady) return undefined;
@@ -176,17 +172,23 @@ export default function Hesa10ButRate({ route, navigation }) {
         console.warn('saveGameSession failed:', sessionError.message);
       }
 
-      if (!isMounted.current) return;
-
       try {
-        navigation.navigate('Hesa10ButReveal', {
+        await notifyPartner(profile, NOTIFICATION_TYPES.HESA10BUT_RATED, {
           roundId,
-          fullSentence: round?.fullSentence || legacyPrompt,
+          prompt: round?.fullSentence || legacyPrompt,
           partnerRating: rating,
         });
-      } catch (navError) {
-        console.warn('Navigate to reveal failed:', navError.message);
+      } catch (notifyError) {
+        console.warn('Creator notification failed:', notifyError.message);
       }
+
+      if (!isMounted.current) return;
+
+      openReveal({
+        id: roundId,
+        fullSentence: round?.fullSentence || legacyPrompt,
+        partnerRating: rating,
+      });
     } catch (error) {
       if (isMounted.current) {
         Alert.alert('Error', error?.message || 'Could not save your rating.');
@@ -266,22 +268,36 @@ export default function Hesa10ButRate({ route, navigation }) {
             </Text>
           </View>
 
-          <Text style={styles.question}>How much does this bother you?</Text>
-
-          <RatingSlider
-            value={rating ?? 1}
-            onChange={handleRatingChange}
-            numberSize={44}
-          />
+          {alreadyRated ? (
+            <Text style={styles.alreadyRated}>
+              Your partner already has a rating for this one.
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.question}>How much does this bother you?</Text>
+              <RatingSlider
+                value={rating ?? 1}
+                onChange={handleRatingChange}
+                numberSize={44}
+              />
+            </>
+          )}
         </ScrollView>
 
         <View style={styles.footer}>
-          <GradientButton
-            title={submitting ? 'Submitting...' : 'Submit Rating'}
-            onPress={handleSubmit}
-            loading={submitting}
-            disabled={!sliderMoved || rating == null || submitting}
-          />
+          {alreadyRated ? (
+            <GradientButton
+              title="See the score"
+              onPress={() => openReveal(round)}
+            />
+          ) : (
+            <GradientButton
+              title={submitting ? 'Submitting...' : 'Submit Rating'}
+              onPress={handleSubmit}
+              loading={submitting}
+              disabled={!sliderMoved || rating == null || submitting}
+            />
+          )}
         </View>
       </SafeAreaView>
     </View>
@@ -371,6 +387,14 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     textAlign: 'center',
     marginBottom: 18,
+  },
+  alreadyRated: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 8,
   },
   footer: {
     paddingHorizontal: SCREEN_PADDING,

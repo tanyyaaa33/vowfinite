@@ -21,7 +21,8 @@ export const POINTS = {
   HES10: 10,
   DARE_DROP: 20,
   DARE_SKIP_PENALTY: 5,
-  VOICE_BOMB: 30,
+  VOICE_BOMB: 20,
+  VOICE_BOMB_REPLY: 10,
   DAILY_STREAK_BONUS: 5,
   PARTNER_SYNC: 10,
 };
@@ -157,17 +158,22 @@ async function fetchCouple(coupleId) {
   return { ref, data: snap.data() };
 }
 
-async function logPointsEvent(coupleId, points, action, totalPoints) {
+async function logPointsEvent(coupleId, points, action, totalPoints, dedupKey = null) {
   try {
     await addDoc(collection(db, 'couples', coupleId, 'pointsLog'), {
       points,
       action,
       totalPoints,
+      dedupKey,
       createdAt: serverTimestamp(),
     });
   } catch (error) {
     console.warn('logPointsEvent failed:', error.message);
   }
+}
+
+function isPointsClaimed(coupleData, claimKey) {
+  return Boolean(coupleData?.pointsClaimed?.[claimKey]);
 }
 
 export async function replenishFreezeTokens(coupleId, existingData = null) {
@@ -192,7 +198,7 @@ export async function replenishFreezeTokens(coupleId, existingData = null) {
   }
 }
 
-export async function addPoints(coupleId, points, action) {
+export async function addPoints(coupleId, points, action, dedupKey = null) {
   try {
     if (!coupleId || points <= 0) {
       return { newPoints: 0, newUnlocks: [] };
@@ -217,7 +223,7 @@ export async function addPoints(coupleId, points, action) {
     }
 
     await updateDoc(ref, updates);
-    await logPointsEvent(coupleId, points, action, newPoints);
+    await logPointsEvent(coupleId, points, action, newPoints, dedupKey);
 
     const newUnlocks = crossedUnlocks.filter((u) => newUnlockIds.includes(u.id));
     return { oldPoints, newPoints, newUnlocks, action };
@@ -427,13 +433,76 @@ export async function deductPoints(coupleId, points, action) {
   }
 }
 
-export async function completeGameActivity(coupleId, points, action) {
+export async function completeGameActivity(coupleId, points, action, dedupKey = null) {
   try {
-    await incrementActivity(coupleId);
-    const pointsResult = await addPoints(coupleId, points, action);
-    return pointsResult;
+    const claimKey = dedupKey || `${action}_${getDateKey()}`;
+    const { ref, data } = await fetchCouple(coupleId);
+
+    if (isPointsClaimed(data, claimKey)) {
+      return {
+        newPoints: data.points ?? 0,
+        newUnlocks: [],
+        alreadyAwarded: true,
+      };
+    }
+
+    const activityResult = await incrementActivity(coupleId);
+    const pointsResult = await addPoints(coupleId, points, action, claimKey);
+
+    const syncKey = `partner-sync_${getDateKey()}`;
+    const claimUpdates = { [`pointsClaimed.${claimKey}`]: true };
+    let syncBonus = null;
+
+    if (
+      activityResult.activitiesToday >= ACTIVITIES_REQUIRED &&
+      !isPointsClaimed(data, syncKey)
+    ) {
+      syncBonus = await addPoints(coupleId, POINTS.PARTNER_SYNC, 'partner-sync', syncKey);
+      claimUpdates[`pointsClaimed.${syncKey}`] = true;
+    }
+
+    await updateDoc(ref, claimUpdates);
+
+    return {
+      ...pointsResult,
+      syncBonus,
+      alreadyAwarded: false,
+      activitiesToday: activityResult.activitiesToday,
+    };
   } catch (error) {
     console.warn('completeGameActivity failed:', error.message);
+    throw error;
+  }
+}
+
+export const DARE_SKIPS_PER_WEEK = 2;
+
+export async function canSkipDare(coupleId) {
+  try {
+    const weekKey = getMonthKey() + '-W' + Math.ceil(new Date().getDate() / 7);
+    const { data } = await fetchCouple(coupleId);
+    const skips = data.dareSkipsThisWeek ?? 0;
+    const skipWeek = data.dareSkipWeekKey;
+    if (skipWeek !== weekKey) return { allowed: true, remaining: DARE_SKIPS_PER_WEEK };
+    return {
+      allowed: skips < DARE_SKIPS_PER_WEEK,
+      remaining: Math.max(0, DARE_SKIPS_PER_WEEK - skips),
+    };
+  } catch {
+    return { allowed: true, remaining: DARE_SKIPS_PER_WEEK };
+  }
+}
+
+export async function recordDareSkip(coupleId) {
+  try {
+    const weekKey = getMonthKey() + '-W' + Math.ceil(new Date().getDate() / 7);
+    const { ref, data } = await fetchCouple(coupleId);
+    const currentWeek = data.dareSkipWeekKey;
+    const skips = currentWeek === weekKey ? (data.dareSkipsThisWeek ?? 0) + 1 : 1;
+    await updateDoc(ref, { dareSkipWeekKey: weekKey, dareSkipsThisWeek: skips });
+    return skips;
+  } catch (error) {
+    console.warn('recordDareSkip failed:', error.message);
     throw error;
   }
 }

@@ -17,6 +17,7 @@ import CoupleLoadError from '../../components/CoupleLoadError';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
+import { getGameNavigationTarget } from '../../utils/gameNavigation';
 
 export default function GamesHubScreen({ navigation }) {
   const { profile } = useContext(AuthContext);
@@ -29,19 +30,37 @@ export default function GamesHubScreen({ navigation }) {
     todayQuestion,
     dailyStatus,
     games,
+    hes10Rounds,
+    partnerId,
+    sessions,
   } = useGamesHub();
 
   const navigateToGame = useCallback(
     (game) => {
-      const screen = game?.screens?.[0];
-      if (!screen) return;
+      if (!game) return;
+
       try {
+        const target = getGameNavigationTarget(game.id, {
+          sessions,
+          hes10Rounds,
+          userId: profile?.uid,
+          partnerId,
+          partnerName: profile?.partnerName,
+        });
+
+        if (target?.screen) {
+          navigation.navigate(target.screen, target.params || {});
+          return;
+        }
+
+        const screen = game.screens?.[0];
+        if (!screen) return;
         navigation.navigate(screen);
       } catch (navError) {
         console.warn('GamesHub navigation failed:', navError.message);
       }
     },
-    [navigation]
+    [navigation, sessions, hes10Rounds, profile?.uid, profile?.partnerName, partnerId]
   );
 
   const openDailyQuestion = useCallback(() => {
@@ -93,7 +112,7 @@ export default function GamesHubScreen({ navigation }) {
                   key={game.id}
                   emoji={game.emoji || '🎮'}
                   title={game.title || 'Game'}
-                  description={game.description || ''}
+                  description={game.statusLabel || game.description || ''}
                   timesPlayed={game.timesPlayed ?? 0}
                   isNew={Boolean(game.isNew)}
                   partnerWaiting={Boolean(game.partnerWaiting)}

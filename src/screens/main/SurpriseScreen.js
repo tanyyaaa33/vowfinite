@@ -104,6 +104,14 @@ export default function SurpriseScreen() {
           title: surprise.title,
           sentBy: profile.name,
         });
+
+        try {
+          await notifyPartner(profile, NOTIFICATION_TYPES.SURPRISE_SENT, {
+            title: surprise.title,
+          });
+        } catch (notifyError) {
+          console.warn('Surprise push failed:', notifyError.message);
+        }
       }
 
       if (!isMounted.current) return;

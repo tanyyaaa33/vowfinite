@@ -21,6 +21,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   saveUserProfile,
+  sendPasswordResetEmail,
   auth,
 } from '../../utils/firebase';
 import { formatAuthError } from '../../utils/authErrors';
@@ -31,6 +32,20 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  const handleForgotPassword = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      Alert.alert('Enter your email', 'Add the email you signed up with first.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      Alert.alert('Check your inbox', 'We sent a password reset link to your email.');
+    } catch (error) {
+      Alert.alert('Could not send reset', formatAuthError(error));
+    }
+  };
 
   const handleAuth = async () => {
     const trimmedEmail = email.trim();
@@ -130,6 +145,12 @@ export default function LoginScreen({ navigation }) {
                 style={styles.button}
               />
 
+              {!isSignUp && (
+                <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotRow}>
+                  <Text style={styles.forgotText}>Forgot password?</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={styles.switchRow}>
                 <Text style={styles.switchText}>
                   {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
@@ -191,6 +212,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   button: { marginTop: 28 },
+  forgotRow: { marginTop: 14, alignItems: 'center' },
+  forgotText: {
+    fontFamily: FONTS.medium,
+    fontSize: 14,
+    color: COLORS.purple,
+  },
   switchRow: { marginTop: 20, alignItems: 'center' },
   switchText: {
     fontFamily: FONTS.regular,

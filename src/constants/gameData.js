@@ -16,7 +16,7 @@ export const HUB_GAMES = [
   {
     id: 'hes-a-10-but',
     title: "He's a 10 But",
-    description: 'Finish the sentence, they rate it',
+    description: 'Send anytime — partner rates when ready',
     emoji: '💅',
     screens: ['Hesa10ButCreate', 'Hesa10ButRate', 'Hesa10ButReveal'],
   },
@@ -66,8 +66,8 @@ export const GAMES = [
   {
     id: 'hes-a-10-but',
     title: 'He\'s a 10 But...',
-    subtitle: 'Rate the dealbreakers together',
-    description: 'Rate the dealbreakers together',
+    subtitle: 'Send anytime — partner rates when ready',
+    description: 'Send anytime — partner rates when ready',
     emoji: '🔥',
     color: '#FF6B9D',
     screens: ['Hesa10ButCreate', 'Hesa10ButRate', 'Hesa10ButReveal'],
@@ -97,7 +97,7 @@ export const GAMES = [
     emoji: '🎙️',
     color: '#FF6B9D',
     screens: ['VoiceBombRecord', 'VoiceBombListen', 'VoiceBombReply'],
-    points: 30,
+    points: 20,
     timesPlayed: 0,
     isNew: false,
     hasNotification: false,

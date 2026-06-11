@@ -27,7 +27,7 @@ import { COLORS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
 import { getCoupleMemberIds } from '../../utils/firebase';
-import { POINTS } from '../../utils/points';
+import { POINTS, getDateKey } from '../../utils/points';
 import {
   getConversationStarter,
   saveDailyQuestionReaction,
@@ -126,7 +126,12 @@ export default function DailyQuestionReveal({ route, navigation }) {
 
     (async () => {
       try {
-        await completeGame(POINTS.DAILY_QUESTION, 'daily-question');
+        await completeGame(
+          POINTS.DAILY_QUESTION,
+          'daily-question',
+          '✨',
+          `daily-question_${dateKey || getDateKey()}`
+        );
         if (active && isMounted.current) {
           showPoints(POINTS.DAILY_QUESTION, '✨');
         }

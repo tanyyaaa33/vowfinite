@@ -4,6 +4,10 @@ import {
   WHO_MORE_LIKELY_BATCH_SIZE,
 } from '../constants/gameData';
 import { getDateKey } from './points';
+import {
+  findPendingRoundForUser,
+  getHes10ButStatus,
+} from './hes10But';
 
 export function getTodayQuestion() {
   return getTodayDailyQuestion().question;
@@ -82,6 +86,13 @@ export function getWhoMoreLikelyStatus(sessions, userId, partnerId, partnerName)
         label: `${partnerName || 'Partner'} finished — your turn`,
       };
     }
+    const userSessions = todaySessions.filter((s) => s.userId === userId);
+    if (userSessions.length > 0 && !userAnswered) {
+      return {
+        status: 'answer',
+        label: `In progress — finish ${WHO_MORE_LIKELY_BATCH_SIZE} questions`,
+      };
+    }
     return { status: 'answer', label: `Answer ${WHO_MORE_LIKELY_BATCH_SIZE} questions` };
   } catch {
     return { status: 'answer', label: `Answer ${WHO_MORE_LIKELY_BATCH_SIZE} questions` };
@@ -108,14 +119,26 @@ export function getDailyQuestionStatus(sessions, userId, partnerId, partnerName)
         label: `Waiting for ${partnerName || 'partner'}`,
       };
     }
+    if (!userAnswered && partnerAnswered) {
+      return {
+        status: 'answer',
+        label: `${partnerName || 'Partner'} answered — your turn`,
+      };
+    }
     return { status: 'answer', label: 'Answer Now' };
   } catch {
     return { status: 'answer', label: 'Answer Now' };
   }
 }
 
-export function isPartnerWaiting(sessions, gameId, userId, partnerId) {
-  if (!partnerId || !userId) return false;
+export function isPartnerWaiting(sessions, gameId, userId, partnerId, hes10Rounds = []) {
+  if (!userId) return false;
+
+  if (gameId === 'hes-a-10-but') {
+    return Boolean(findPendingRoundForUser(hes10Rounds, userId));
+  }
+
+  if (!partnerId) return false;
 
   const todayKey = getDateKey();
   const todaySessions = getTodaySessions(sessions, gameId, todayKey);
@@ -128,12 +151,6 @@ export function isPartnerWaiting(sessions, gameId, userId, partnerId) {
     case 'daily-question':
     case 'who-more-likely':
       return partnerPlayed && !userPlayed;
-    case 'hes-a-10-but':
-      return (
-        todaySessions.some(
-          (session) => session.userId === partnerId && session.stage === 'create'
-        ) && !userPlayed
-      );
     case 'dare-drop':
     case 'voice-bomb':
       return partnerPlayed && !userPlayed;
@@ -142,12 +159,68 @@ export function isPartnerWaiting(sessions, gameId, userId, partnerId) {
   }
 }
 
-export function buildHubGameCards(sessions, userId, partnerId) {
+function getGameHubStatus(gameId, sessions, userId, partnerId, partnerName, hes10Rounds) {
+  switch (gameId) {
+    case 'daily-question':
+      return getDailyQuestionStatus(sessions, userId, partnerId, partnerName);
+    case 'who-more-likely':
+      return getWhoMoreLikelyStatus(sessions, userId, partnerId, partnerName);
+    case 'hes-a-10-but':
+      return getHes10ButStatus(hes10Rounds, userId, partnerName);
+    case 'dare-drop': {
+      const todayKey = getDateKey();
+      const partnerCompleted = getTodaySessions(sessions, 'dare-drop', todayKey).some(
+        (s) => s.userId === partnerId && s.stage === 'complete'
+      );
+      if (partnerCompleted) {
+        return { status: 'react', label: 'React to partner\'s dare' };
+      }
+      return { status: 'play', label: 'Today\'s dare awaits' };
+    }
+    case 'voice-bomb': {
+      const partnerSent = sessions.some(
+        (s) => s.gameId === 'voice-bomb' && s.userId === partnerId
+      );
+      if (partnerSent && !userPlayedToday(sessions, 'voice-bomb', userId)) {
+        return { status: 'listen', label: 'Listen to voice bomb' };
+      }
+      return { status: 'play', label: 'Record a message' };
+    }
+    default:
+      return null;
+  }
+}
+
+export function buildHubGameCards(
+  sessions,
+  userId,
+  partnerId,
+  { hes10Rounds = [], partnerName = 'partner' } = {}
+) {
   const list = Array.isArray(sessions) ? sessions : [];
-  return (HUB_GAMES || []).map((game) => ({
-    ...game,
-    timesPlayed: countGameSessions(list, game.id),
-    isNew: countGameSessions(list, game.id) === 0,
-    partnerWaiting: isPartnerWaiting(list, game.id, userId, partnerId),
-  }));
+  return (HUB_GAMES || []).map((game) => {
+    const hubStatus = getGameHubStatus(
+      game.id,
+      list,
+      userId,
+      partnerId,
+      partnerName,
+      hes10Rounds
+    );
+
+    return {
+      ...game,
+      timesPlayed: countGameSessions(list, game.id),
+      isNew: countGameSessions(list, game.id) === 0,
+      partnerWaiting: isPartnerWaiting(
+        list,
+        game.id,
+        userId,
+        partnerId,
+        hes10Rounds
+      ),
+      hubStatus,
+      statusLabel: hubStatus?.label || null,
+    };
+  });
 }
