@@ -26,7 +26,9 @@ import DailyQuestionLoader from '../../components/dailyQuestion/DailyQuestionLoa
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
-import { getTodayDailyQuestion } from '../../constants/gameData';
+import { getDailyQuestionForDate, parseDateKey } from '../../constants/gameData';
+import BackToGamesButton from '../../components/BackToGamesButton';
+import { nudgePartner } from '../../utils/nudgePartner';
 import { useCouple } from '../../hooks/useCouple';
 import { saveGameSession, getCoupleMemberIds } from '../../utils/firebase';
 import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
@@ -34,7 +36,9 @@ import { getDateKey, getStreakCount, ACTIVITIES_REQUIRED } from '../../utils/poi
 import {
   subscribeToDailyQuestion,
   submitDailyQuestionAnswer,
+  updateDailyQuestionAnswer,
   hasUserAnswered,
+  hasPartnerAnswered,
   getUserAnswerFromDoc,
   getPartnerAnswerFromDoc,
   canRevealAnswers,
@@ -78,10 +82,15 @@ function PulsingAvatar({ name }) {
   );
 }
 
-export default function DailyQuestionAnswer({ navigation }) {
+export default function DailyQuestionAnswer({ navigation, route }) {
   const { profile } = useContext(AuthContext);
   const { couple, loading: coupleLoading } = useCouple();
-  const dailyMeta = useMemo(() => getTodayDailyQuestion(), []);
+  const activeDateKey = route?.params?.dateKey || getDateKey();
+  const isCatchUp = activeDateKey !== getDateKey();
+  const dailyMeta = useMemo(
+    () => getDailyQuestionForDate(parseDateKey(activeDateKey)),
+    [activeDateKey]
+  );
   const { question, category } = dailyMeta;
 
   const [answer, setAnswer] = useState('');
@@ -89,6 +98,9 @@ export default function DailyQuestionAnswer({ navigation }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [waiting, setWaiting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [partnerAnswered, setPartnerAnswered] = useState(false);
+  const [nudging, setNudging] = useState(false);
   const [docReady, setDocReady] = useState(false);
   const [members, setMembers] = useState([]);
 
@@ -160,14 +172,14 @@ export default function DailyQuestionAnswer({ navigation }) {
           category: docData.category || category,
           answer: userAnswer,
           partnerAnswer,
-          dateKey: docData.dateKey || getDateKey(),
+          dateKey: docData.dateKey || activeDateKey,
         });
       } catch (error) {
         navigatedRef.current = false;
         console.warn('Navigate to reveal failed:', error.message);
       }
     },
-    [navigation, profile?.uid, getMemberList, question, category]
+    [navigation, profile?.uid, getMemberList, question, category, activeDateKey]
   );
 
   useEffect(() => {
@@ -176,21 +188,24 @@ export default function DailyQuestionAnswer({ navigation }) {
       return undefined;
     }
 
-    const dateKey = getDateKey();
     let active = true;
 
     const unsubscribe = subscribeToDailyQuestion(
       profile.coupleId,
-      dateKey,
+      activeDateKey,
       (docData) => {
         if (!active || !isMounted.current) return;
 
         setDocReady(true);
         const memberList = getMemberList();
+        const partnerDone = docData
+          ? hasPartnerAnswered(docData, profile.uid, memberList)
+          : false;
+        setPartnerAnswered(partnerDone);
 
         if (docData && hasUserAnswered(docData, profile.uid, memberList)) {
           setSubmitted(true);
-          setWaiting(true);
+          setWaiting(!partnerDone);
           setAnswer(getUserAnswerFromDoc(docData, profile.uid, memberList));
         }
 
@@ -208,11 +223,29 @@ export default function DailyQuestionAnswer({ navigation }) {
       active = false;
       unsubscribe();
     };
-  }, [profile?.coupleId, profile?.uid, navigateToReveal, getMemberList]);
+  }, [profile?.coupleId, profile?.uid, activeDateKey, navigateToReveal, getMemberList]);
+
+  const handleNudge = async () => {
+    if (nudging) return;
+    setNudging(true);
+    try {
+      const result = await nudgePartner(profile, 'daily-question', { dateKey: activeDateKey });
+      if (result.sent) {
+        Alert.alert('Nudge sent', `${profile?.partnerName || 'Your partner'} will get a reminder.`);
+      } else {
+        Alert.alert('Try again later', 'You can nudge once per hour.');
+      }
+    } catch (error) {
+      Alert.alert('Could not nudge', error?.message || 'Please try again.');
+    } finally {
+      if (isMounted.current) setNudging(false);
+    }
+  };
 
   const handleSubmit = async () => {
     const trimmed = answer.trim();
-    if (!trimmed || submitting || submitted) return;
+    if (!trimmed || submitting) return;
+    if (submitted && !editing) return;
 
     if (!profile?.coupleId || !profile?.uid) {
       Alert.alert('Connect first', 'Link with your partner to answer together.');
@@ -222,40 +255,52 @@ export default function DailyQuestionAnswer({ navigation }) {
     setSubmitting(true);
     try {
       const memberList = getMemberList();
-      const result = await submitDailyQuestionAnswer(profile.coupleId, profile.uid, memberList, {
-        question,
-        category,
-        answer: trimmed,
-      });
+      const result = editing
+        ? await updateDailyQuestionAnswer(profile.coupleId, profile.uid, memberList, {
+            answer: trimmed,
+            dateKey: activeDateKey,
+          })
+        : await submitDailyQuestionAnswer(profile.coupleId, profile.uid, memberList, {
+            question,
+            category,
+            answer: trimmed,
+            dateKey: activeDateKey,
+          });
 
       try {
         await saveGameSession(profile.coupleId, 'daily-question', {
           question,
           answer: trimmed,
           userId: profile.uid,
-          dateKey: getDateKey(),
+          dateKey: activeDateKey,
         });
       } catch (sessionError) {
         console.warn('saveGameSession failed:', sessionError.message);
       }
 
-      try {
-        await notifyPartner(profile, NOTIFICATION_TYPES.PARTNER_ANSWERED, { question });
-      } catch (notifyError) {
-        console.warn('Partner notification failed:', notifyError.message);
+      if (!editing) {
+        try {
+          await notifyPartner(profile, NOTIFICATION_TYPES.PARTNER_ANSWERED, {
+            question,
+            dateKey: activeDateKey,
+          });
+        } catch (notifyError) {
+          console.warn('Partner notification failed:', notifyError.message);
+        }
       }
 
       if (!isMounted.current) return;
 
       setSubmitted(true);
-      setWaiting(true);
+      setEditing(false);
+      setWaiting(!result?.bothAnswered);
 
       if (result?.bothAnswered) {
         navigateToReveal({
           ...result,
           question: result.question || question,
           category: result.category || category,
-          dateKey: result.dateKey || getDateKey(),
+          dateKey: result.dateKey || activeDateKey,
         });
       }
     } catch (error) {
@@ -271,7 +316,7 @@ export default function DailyQuestionAnswer({ navigation }) {
 
   const streak = getStreakCount(couple);
   const activitiesToday = couple?.activitiesToday ?? 0;
-  const canSubmit = Boolean(answer.trim()) && !submitted && !submitting;
+  const canSubmit = Boolean(answer.trim()) && (!submitted || editing) && !submitting;
   const screenLoading = coupleLoading || (Boolean(profile?.coupleId) && !docReady);
 
   if (screenLoading) {
@@ -289,9 +334,14 @@ export default function DailyQuestionAnswer({ navigation }) {
               <Text style={styles.backArrow}>←</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              Daily Question
+              {isCatchUp ? 'Catch-up Question' : 'Daily Question'}
             </Text>
-            <View style={styles.headerSpacer} />
+            <TouchableOpacity
+              onPress={() => navigation.navigate('DailyQuestionHistory')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.historyLink}>History</Text>
+            </TouchableOpacity>
           </View>
           <DailyQuestionLoader />
         </SafeAreaView>
@@ -314,9 +364,17 @@ export default function DailyQuestionAnswer({ navigation }) {
             <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            Daily Question
+            {isCatchUp ? 'Catch-up Question' : 'Daily Question'}
           </Text>
-          <MiniStreakBadge streak={streak} activitiesToday={activitiesToday} />
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('DailyQuestionHistory')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.historyLink}>History</Text>
+            </TouchableOpacity>
+            <MiniStreakBadge streak={streak} activitiesToday={activitiesToday} />
+          </View>
         </View>
 
         <KeyboardAvoidingView
@@ -339,7 +397,18 @@ export default function DailyQuestionAnswer({ navigation }) {
               </View>
             </View>
 
-            {!waiting ? (
+            {waiting && !editing ? (
+              <View style={styles.waitingBlock}>
+                <PulsingAvatar name={profile?.partnerName} />
+                <Text style={styles.waitingTitle}>Answer locked in 💕</Text>
+                <Text style={styles.waitingSubtitle} numberOfLines={2}>
+                  {profile?.partnerName || 'Your partner'} can answer anytime — no need to wait here.
+                </Text>
+                <Text style={styles.waitingHint}>
+                  We&apos;ll notify you when it&apos;s time to reveal.
+                </Text>
+              </View>
+            ) : !waiting || editing ? (
               <>
                 <Text style={styles.inputLabel}>Your answer</Text>
                 <View style={styles.inputWrap}>
@@ -375,30 +444,60 @@ export default function DailyQuestionAnswer({ navigation }) {
                   </View>
                 </View>
               </>
-            ) : (
-              <View style={styles.waitingBlock}>
-                <PulsingAvatar name={profile?.partnerName} />
-                <Text style={styles.waitingTitle}>Answer locked in 💕</Text>
-                <Text style={styles.waitingSubtitle} numberOfLines={2}>
-                  Waiting for {profile?.partnerName || 'your partner'} to answer...
-                </Text>
-                <Text style={styles.waitingHint}>
-                  You&apos;ll both see the reveal the moment they submit.
-                </Text>
-              </View>
             )}
           </ScrollView>
 
-          {!waiting && (
-            <View style={styles.footer}>
+          <View style={styles.footer}>
+            {waiting ? (
+              <>
+                {!partnerAnswered && (
+                  <GradientButton
+                    title={editing ? 'Cancel edit' : 'Edit my answer'}
+                    onPress={() => setEditing((v) => !v)}
+                  />
+                )}
+                <GradientButton
+                  title={nudging ? 'Sending...' : `Nudge ${profile?.partnerName || 'partner'}`}
+                  onPress={handleNudge}
+                  loading={nudging}
+                  disabled={nudging || editing}
+                />
+                {editing ? (
+                  <GradientButton
+                    title={submitting ? 'Saving...' : 'Save changes'}
+                    onPress={handleSubmit}
+                    loading={submitting}
+                    disabled={!canSubmit}
+                  />
+                ) : null}
+                <BackToGamesButton navigation={navigation} />
+              </>
+            ) : submitted && !partnerAnswered ? (
+              <>
+                {editing ? (
+                  <GradientButton
+                    title={submitting ? 'Saving...' : 'Save changes'}
+                    onPress={handleSubmit}
+                    loading={submitting}
+                    disabled={!canSubmit}
+                  />
+                ) : (
+                  <GradientButton
+                    title="Edit my answer"
+                    onPress={() => setEditing(true)}
+                  />
+                )}
+                <BackToGamesButton navigation={navigation} />
+              </>
+            ) : (
               <GradientButton
                 title={submitting ? 'Submitting...' : 'Submit Answer'}
                 onPress={handleSubmit}
                 loading={submitting}
                 disabled={!canSubmit}
               />
-            </View>
-          )}
+            )}
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
@@ -459,6 +558,16 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 36,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  historyLink: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: COLORS.purple,
   },
   miniStreak: {
     flexDirection: 'row',

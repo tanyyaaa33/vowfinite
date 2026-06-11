@@ -66,6 +66,8 @@ export const NOTIFICATION_TYPES = {
   STREAK_MILESTONE: 'streak_milestone',
   POINTS_UNLOCK: 'points_unlock',
   SURPRISE_SENT: 'surprise_sent',
+  PARTNER_NUDGE: 'partner_nudge',
+  DARE_SENT_TO_PARTNER: 'dare_sent_to_partner',
 };
 
 export const DAILY_QUESTION_REMINDER_ID = 'daily-question-8pm';
@@ -126,6 +128,16 @@ export function buildNotificationContent(type, data = {}) {
         title: 'VowFinity',
         body: `${name} is planning a surprise for you ✨`,
       };
+    case NOTIFICATION_TYPES.PARTNER_NUDGE:
+      return {
+        title: 'VowFinity',
+        body: `${name} is waiting on you — your turn 💕`,
+      };
+    case NOTIFICATION_TYPES.DARE_SENT_TO_PARTNER:
+      return {
+        title: 'VowFinity',
+        body: `${name} sent you a dare 🎯`,
+      };
     default:
       return { title: 'VowFinity', body: data.body || 'You have a new update 💕' };
   }
@@ -152,6 +164,19 @@ export function getScreenForNotificationType(type, data = {}) {
       };
     case NOTIFICATION_TYPES.DARE_COMPLETED:
       return { name: 'DareDropReaction', params: { dareDropId: data.dareDropId, dare: data.dare } };
+    case NOTIFICATION_TYPES.DARE_SENT_TO_PARTNER:
+      return { name: 'DareDropDare', params: { dareDropId: data.dareDropId } };
+    case NOTIFICATION_TYPES.PARTNER_NUDGE:
+      if (data.gameId === 'who-more-likely') {
+        return { name: 'WhoMoreLikelyQuestion', params: data };
+      }
+      if (data.gameId === 'hes-a-10-but') {
+        return { name: 'Hesa10ButRate', params: { roundId: data.roundId } };
+      }
+      if (data.gameId === 'voice-bomb') {
+        return { name: 'VoiceBombListen', params: { voiceBombId: data.voiceBombId } };
+      }
+      return { name: 'DailyQuestionAnswer', params: data };
     case NOTIFICATION_TYPES.VOICE_BOMB_SENT:
       return {
         name: 'VoiceBombListen',

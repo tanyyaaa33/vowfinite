@@ -5,9 +5,11 @@ import {
   updateDoc,
   getDoc,
   onSnapshot,
+  collection,
   serverTimestamp,
 } from './firebase';
 import { getDateKey } from './points';
+import { getDailyQuestionForDate, parseDateKey } from '../constants/gameData';
 import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 
 export const MAX_DAILY_ANSWER_LENGTH = 500;
@@ -32,6 +34,16 @@ const CONVERSATION_STARTERS = {
     'What would you add to their adventure plan?',
     'Which idea should you try this weekend?',
     'What is the first step to make this happen together?',
+  ],
+  Gratitude: [
+    'What can you thank them for that you haven\'t said out loud yet?',
+    'How did their answer shift how you see the relationship?',
+    'What small act of appreciation could you do this week?',
+  ],
+  Future: [
+    'What step could you take this month toward what they shared?',
+    'How does their vision align with yours — where do you differ?',
+    'What would make their dream feel more real and shared?',
   ],
 };
 
@@ -86,11 +98,65 @@ export function subscribeToDailyQuestion(coupleId, dateKey, callback, onError) {
   );
 }
 
+export function subscribeToDailyQuestionHistory(coupleId, callback, onError) {
+  if (!coupleId) return () => {};
+
+  if (isGuestCoupleId(coupleId)) {
+    callback([]);
+    return () => {};
+  }
+
+  return onSnapshot(
+    collection(db, 'couples', coupleId, 'dailyQuestion'),
+    (snap) => {
+      try {
+        const items = snap.docs
+          .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+          .sort((a, b) => String(b.dateKey || b.id).localeCompare(String(a.dateKey || a.id)));
+        callback(items);
+      } catch (error) {
+        console.warn('subscribeToDailyQuestionHistory callback error:', error.message);
+        callback([]);
+      }
+    },
+    (error) => {
+      console.warn('subscribeToDailyQuestionHistory error:', error.message);
+      onError?.(error);
+      callback([]);
+    }
+  );
+}
+
+export function getMissedDateKeys(history = [], userId, members, daysBack = 7) {
+  const missed = [];
+  const today = new Date();
+
+  for (let i = 1; i <= daysBack; i += 1) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateKey = getDateKey(d);
+    const docData = history.find((item) => item.dateKey === dateKey || item.id === dateKey);
+    if (!docData) {
+      missed.push(dateKey);
+      continue;
+    }
+    if (!hasUserAnswered(docData, userId, members)) {
+      missed.push(dateKey);
+    }
+  }
+
+  return missed;
+}
+
+export function hasPartnerAnswered(docData, userId, members) {
+  return Boolean(getPartnerAnswerFromDoc(docData, userId, members)?.trim());
+}
+
 export async function submitDailyQuestionAnswer(
   coupleId,
   userId,
   members,
-  { question, category, answer }
+  { question, category, answer, dateKey: dateKeyParam }
 ) {
   if (isGuestCoupleId(coupleId)) {
     showGuestSignupPrompt();
@@ -98,7 +164,7 @@ export async function submitDailyQuestionAnswer(
   }
 
   try {
-    const dateKey = getDateKey();
+    const dateKey = dateKeyParam || getDateKey();
     const ref = getDailyQuestionDocRef(coupleId, dateKey);
     const memberList = [...(members || []), userId].filter(Boolean);
     const uniqueMembers = [...new Set(memberList)];
@@ -113,6 +179,10 @@ export async function submitDailyQuestionAnswer(
     const existing = snap.exists() ? snap.data() : {};
     const sortedMembers = [...uniqueMembers].sort();
 
+    const catalogMeta = getDailyQuestionForDate(parseDateKey(dateKey));
+    const resolvedQuestion = question || existing.question || catalogMeta.question;
+    const resolvedCategory = category || existing.category || catalogMeta.category;
+
     const player1Answer =
       slot === 'player1' ? trimmed : existing.player1Answer || null;
     const player2Answer =
@@ -123,8 +193,8 @@ export async function submitDailyQuestionAnswer(
     await setDoc(
       ref,
       {
-        question: question || existing.question,
-        category: category || existing.category,
+        question: resolvedQuestion,
+        category: resolvedCategory,
         dateKey,
         player1Id: sortedMembers[0] || existing.player1Id || null,
         player2Id: sortedMembers[1] || existing.player2Id || null,
@@ -142,13 +212,46 @@ export async function submitDailyQuestionAnswer(
       bothAnswered,
       player1Answer,
       player2Answer,
-      question: question || existing.question,
-      category: category || existing.category,
+      question: resolvedQuestion,
+      category: resolvedCategory,
     };
   } catch (error) {
     console.warn('submitDailyQuestionAnswer failed:', error.message);
     throw error;
   }
+}
+
+export async function updateDailyQuestionAnswer(
+  coupleId,
+  userId,
+  members,
+  { answer, dateKey: dateKeyParam }
+) {
+  const dateKey = dateKeyParam || getDateKey();
+  const ref = getDailyQuestionDocRef(coupleId, dateKey);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error('No answer found for this day.');
+  }
+
+  const existing = snap.data();
+  if (hasPartnerAnswered(existing, userId, members)) {
+    throw new Error('Your partner already answered — edits are locked.');
+  }
+
+  const trimmed = answer?.trim();
+  if (!trimmed) throw new Error('Answer cannot be empty.');
+
+  const slot = getPlayerSlot(userId, members);
+  const field = slot === 'player1' ? 'player1Answer' : 'player2Answer';
+
+  await updateDoc(ref, {
+    [field]: trimmed,
+    bothAnswered: false,
+    updatedAt: serverTimestamp(),
+  });
+
+  return { dateKey, answer: trimmed };
 }
 
 export async function saveDailyQuestionReaction(

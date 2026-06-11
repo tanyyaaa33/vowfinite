@@ -62,6 +62,10 @@ import DareDropReaction from './src/screens/games/DareDropReaction';
 import VoiceBombRecord from './src/screens/games/VoiceBombRecord';
 import VoiceBombListen from './src/screens/games/VoiceBombListen';
 import VoiceBombReply from './src/screens/games/VoiceBombReply';
+import DailyQuestionHistory from './src/screens/games/DailyQuestionHistory';
+import VoiceBombInbox from './src/screens/games/VoiceBombInbox';
+import Hes10History from './src/screens/games/Hes10History';
+import MemoryLaneScreen from './src/screens/main/MemoryLaneScreen';
 import { AuthContext } from './src/context/AuthContext';
 
 const AuthStack = createStackNavigator();
@@ -182,6 +186,10 @@ const gameScreens = [
   { name: 'VoiceBombRecord', component: VoiceBombRecord },
   { name: 'VoiceBombListen', component: VoiceBombListen },
   { name: 'VoiceBombReply', component: VoiceBombReply },
+  { name: 'DailyQuestionHistory', component: DailyQuestionHistory },
+  { name: 'VoiceBombInbox', component: VoiceBombInbox },
+  { name: 'Hes10History', component: Hes10History },
+  { name: 'MemoryLane', component: MemoryLaneScreen },
 ];
 
 function MainNavigator() {

@@ -175,6 +175,12 @@ function getGameHubStatus(gameId, sessions, userId, partnerId, partnerName, hes1
       if (partnerCompleted) {
         return { status: 'react', label: 'React to partner\'s dare' };
       }
+      const partnerSent = sessions.some(
+        (s) => s.gameId === 'dare-drop' && s.stage === 'sent_to_partner'
+      );
+      if (partnerSent) {
+        return { status: 'partner', label: 'Dare from partner' };
+      }
       return { status: 'play', label: 'Today\'s dare awaits' };
     }
     case 'voice-bomb': {

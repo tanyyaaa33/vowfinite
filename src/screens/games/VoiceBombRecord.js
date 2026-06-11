@@ -195,7 +195,12 @@ export default function VoiceBombRecord({ navigation }) {
           <Text style={styles.headerTitle} numberOfLines={1}>
             Voice Bomb 🎙️
           </Text>
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity
+            onPress={() => navigation.navigate('VoiceBombInbox')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.inboxLink}>Inbox</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -281,6 +286,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#FFFFFF',
     lineHeight: 28,
+  },
+  inboxLink: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
   },
   headerTitle: {
     flex: 1,

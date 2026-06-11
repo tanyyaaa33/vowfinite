@@ -34,6 +34,9 @@ import { useCouple } from '../../hooks/useCouple';
 import { saveGameSession, getCoupleMemberIds } from '../../utils/firebase';
 import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
 import { getDateKey } from '../../utils/points';
+import BackToGamesButton from '../../components/BackToGamesButton';
+import GradientButton from '../../components/GradientButton';
+import { nudgePartner } from '../../utils/nudgePartner';
 import {
   subscribeToWhoMoreLikely,
   submitWhoMoreLikelyAnswer,
@@ -145,6 +148,7 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedChoice, setSelectedChoice] = useState(null);
   const [waiting, setWaiting] = useState(false);
+  const [nudging, setNudging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [docReady, setDocReady] = useState(false);
 
@@ -441,6 +445,31 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
                 <AnimatedDots />
               </View>
             </View>
+
+            <View style={styles.waitingFooter}>
+              <GradientButton
+                title={nudging ? 'Sending...' : `Nudge ${partnerName}`}
+                onPress={async () => {
+                  setNudging(true);
+                  try {
+                    const result = await nudgePartner(profile, 'who-more-likely', {
+                      dateKey: getDateKey(),
+                    });
+                    Alert.alert(
+                      result.sent ? 'Nudge sent' : 'Try again later',
+                      result.sent
+                        ? `${partnerName} will get a reminder.`
+                        : 'You can nudge once per hour.'
+                    );
+                  } finally {
+                    setNudging(false);
+                  }
+                }}
+                loading={nudging}
+                disabled={nudging}
+              />
+              <BackToGamesButton navigation={navigation} />
+            </View>
           </View>
         </SafeAreaView>
       </View>
@@ -651,6 +680,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SCREEN_PADDING,
     paddingBottom: 40,
+  },
+  waitingFooter: {
+    width: '100%',
+    marginTop: 24,
+    gap: 8,
   },
   doneEmoji: {
     fontSize: 48,

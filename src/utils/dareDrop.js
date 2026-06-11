@@ -278,6 +278,80 @@ export async function savePartnerDareReaction(coupleId, dareDropId, userId, reac
   }
 }
 
+export function findPendingPartnerDare(items, userId) {
+  if (!userId || !Array.isArray(items)) return null;
+  return (
+    items.find(
+      (item) =>
+        item.status === 'sent_to_partner' &&
+        item.targetUserId === userId
+    ) || null
+  );
+}
+
+export async function sendDareToPartner(coupleId, senderId, targetUserId, dareMeta) {
+  if (isGuestCoupleId(coupleId)) {
+    showGuestSignupPrompt();
+    return null;
+  }
+
+  try {
+    const dareDropId = `${Date.now()}_${String(senderId).slice(0, 6)}`;
+    const ref = getDareDropRef(coupleId, dareDropId);
+
+    await setDoc(ref, {
+      dareDropId,
+      dareId: dareMeta.id,
+      text: dareMeta.text,
+      category: dareMeta.category,
+      timeEstimate: dareMeta.timeEstimate,
+      categoryColor: getCategoryColor(dareMeta.category),
+      userId: senderId,
+      senderId,
+      targetUserId,
+      status: 'sent_to_partner',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    return { dareDropId };
+  } catch (error) {
+    console.warn('sendDareToPartner failed:', error.message);
+    throw error;
+  }
+}
+
+export async function acceptPartnerDare(coupleId, dareDropId, userId) {
+  try {
+    const ref = getDareDropRef(coupleId, dareDropId);
+    await updateDoc(ref, {
+      status: 'accepted',
+      userId,
+      acceptedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.warn('acceptPartnerDare failed:', error.message);
+    throw error;
+  }
+}
+
+export async function declinePartnerDare(coupleId, dareDropId, userId, message = '') {
+  try {
+    const ref = getDareDropRef(coupleId, dareDropId);
+    await updateDoc(ref, {
+      status: 'declined',
+      declinedBy: userId,
+      declineMessage: message?.trim() || null,
+      declinedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.warn('declinePartnerDare failed:', error.message);
+    throw error;
+  }
+}
+
 export function formatDareDate(item) {
   try {
     const ts = item?.completedAt || item?.acceptedAt || item?.createdAt;

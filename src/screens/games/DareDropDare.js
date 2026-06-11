@@ -26,7 +26,8 @@ import {
   getTodayDareIndex,
 } from '../../constants/gameData';
 import { useCouple } from '../../hooks/useCouple';
-import { saveGameSession } from '../../utils/firebase';
+import { saveGameSession, getPartnerUserId } from '../../utils/firebase';
+import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
 import {
   deductPoints,
   POINTS,
@@ -37,10 +38,15 @@ import {
 } from '../../utils/points';
 import {
   subscribeToDareDropHistory,
+  subscribeToDareDrop,
   createDareDropOffer,
   acceptDareDrop,
+  acceptPartnerDare,
+  declinePartnerDare,
   skipDareDrop,
   findAcceptedDare,
+  findPendingPartnerDare,
+  sendDareToPartner,
   getCategoryColor,
 } from '../../utils/dareDrop';
 
@@ -85,12 +91,14 @@ function DareCard({ dare, enteringKey }) {
   );
 }
 
-export default function DareDropDare({ navigation }) {
+export default function DareDropDare({ navigation, route }) {
   const { profile } = useContext(AuthContext);
   const { couple, loading: coupleLoading } = useCouple();
 
   const [skipOffset, setSkipOffset] = useState(0);
-  const [dareDropId, setDareDropId] = useState(null);
+  const [dareDropId, setDareDropId] = useState(route?.params?.dareDropId || null);
+  const [partnerDare, setPartnerDare] = useState(null);
+  const [sendingToPartner, setSendingToPartner] = useState(false);
   const [ready, setReady] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
   const [offerReady, setOfferReady] = useState(false);
@@ -164,6 +172,11 @@ export default function DareDropDare({ navigation }) {
       (items) => {
         if (!active || !isMounted.current) return;
         try {
+          const pending = findPendingPartnerDare(items, profile.uid);
+          if (pending) {
+            setPartnerDare(pending);
+            setDareDropId(pending.dareDropId || pending.id);
+          }
           const accepted = findAcceptedDare(items, profile.uid);
           if (accepted) {
             goToComplete(accepted);
@@ -187,11 +200,26 @@ export default function DareDropDare({ navigation }) {
   }, [profile?.coupleId, profile?.uid, goToComplete]);
 
   useEffect(() => {
+    if (!profile?.coupleId || !dareDropId || partnerDare) return undefined;
+
+    return subscribeToDareDrop(
+      profile.coupleId,
+      dareDropId,
+      (doc) => {
+        if (doc?.status === 'sent_to_partner' && doc.targetUserId === profile?.uid) {
+          setPartnerDare(doc);
+        }
+      },
+      () => {}
+    );
+  }, [profile?.coupleId, profile?.uid, dareDropId, partnerDare]);
+
+  useEffect(() => {
     if (!profile?.coupleId || !profile?.uid || !historyReady) {
       return undefined;
     }
 
-    if (dareDropId) {
+    if (dareDropId || partnerDare) {
       setOfferReady(true);
       return undefined;
     }
@@ -231,6 +259,81 @@ export default function DareDropDare({ navigation }) {
       active = false;
     };
   }, [profile?.coupleId, profile?.uid, historyReady, dare, skipOffset, dareDropId]);
+
+  const handleSendToPartner = async () => {
+    if (sendingToPartner || !profile?.coupleId) return;
+    setSendingToPartner(true);
+    try {
+      const partnerId = await getPartnerUserId(profile.coupleId, profile.uid);
+      if (!partnerId) {
+        Alert.alert('No partner yet', 'Invite your partner first.');
+        return;
+      }
+      const { dareDropId: sentId } = await sendDareToPartner(
+        profile.coupleId,
+        profile.uid,
+        partnerId,
+        dare
+      );
+      await notifyPartner(profile, NOTIFICATION_TYPES.DARE_SENT_TO_PARTNER, {
+        dareDropId: sentId,
+        dare: dare.text,
+      });
+      try {
+        await saveGameSession(profile.coupleId, 'dare-drop', {
+          stage: 'sent_to_partner',
+          dareDropId: sentId,
+          userId: profile.uid,
+          text: dare.text,
+        });
+      } catch (sessionError) {
+        console.warn('saveGameSession failed:', sessionError.message);
+      }
+      Alert.alert(
+        'Dare sent!',
+        `${profile.partnerName || 'Your partner'} can accept and complete it anytime.`
+      );
+    } catch (error) {
+      Alert.alert('Could not send', error?.message || 'Try again.');
+    } finally {
+      if (isMounted.current) setSendingToPartner(false);
+    }
+  };
+
+  const handleAcceptPartnerDare = async () => {
+    if (accepting || !partnerDare) return;
+    const id = partnerDare.dareDropId || partnerDare.id;
+    setAccepting(true);
+    try {
+      await acceptPartnerDare(profile.coupleId, id, profile.uid);
+      setPartnerDare(null);
+      goToComplete({
+        id,
+        text: partnerDare.text,
+        category: partnerDare.category,
+        timeEstimate: partnerDare.timeEstimate,
+        categoryColor: partnerDare.categoryColor || getCategoryColor(partnerDare.category),
+      });
+    } catch (error) {
+      Alert.alert('Error', error?.message);
+    } finally {
+      if (isMounted.current) setAccepting(false);
+    }
+  };
+
+  const handleDeclinePartnerDare = async () => {
+    const id = partnerDare?.dareDropId || partnerDare?.id;
+    if (!id) return;
+    try {
+      await declinePartnerDare(profile.coupleId, id, profile.uid);
+      setPartnerDare(null);
+      setDareDropId(null);
+      offerCreatedRef.current = false;
+      Alert.alert('Declined', 'You can pick your own dare below.');
+    } catch (error) {
+      Alert.alert('Error', error?.message);
+    }
+  };
 
   const handleAccept = async () => {
     if (accepting || !dareDropId) return;
@@ -391,26 +494,63 @@ export default function DareDropDare({ navigation }) {
             </Text>
           </View>
 
-          <DareCard dare={dare} enteringKey={`${dare.id}-${skipOffset}`} />
+          {partnerDare ? (
+            <>
+              <Text style={styles.partnerBanner}>
+                {profile?.partnerName || 'Partner'} sent you a dare
+              </Text>
+              <DareCard
+                dare={{
+                  text: partnerDare.text,
+                  category: partnerDare.category,
+                  timeEstimate: partnerDare.timeEstimate,
+                  categoryColor: partnerDare.categoryColor,
+                }}
+                enteringKey={`partner-${partnerDare.id}`}
+              />
+              <GradientButton
+                title={accepting ? 'Accepting...' : "I'll do it 💪"}
+                onPress={handleAcceptPartnerDare}
+                loading={accepting}
+                disabled={accepting}
+                style={styles.acceptBtn}
+              />
+              <TouchableOpacity style={styles.skipBtn} onPress={handleDeclinePartnerDare}>
+                <Text style={styles.skipText}>Not today</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <DareCard dare={dare} enteringKey={`${dare.id}-${skipOffset}`} />
 
-          <GradientButton
-            title={accepting ? 'Saving...' : "I'll Do This 💪"}
-            onPress={handleAccept}
-            loading={accepting}
-            disabled={accepting || skipping || !dareDropId}
-            style={styles.acceptBtn}
-          />
+              <GradientButton
+                title={accepting ? 'Saving...' : "I'll Do This 💪"}
+                onPress={handleAccept}
+                loading={accepting}
+                disabled={accepting || skipping || !dareDropId}
+                style={styles.acceptBtn}
+              />
 
-          <TouchableOpacity
-            style={styles.skipBtn}
-            onPress={() => setSkipSheetVisible(true)}
-            disabled={accepting || skipping || !dareDropId}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.skipText}>
-              Skip (−{POINTS.DARE_SKIP_PENALTY} pts)
-            </Text>
-          </TouchableOpacity>
+              <GradientButton
+                title={sendingToPartner ? 'Sending...' : `Send to ${profile?.partnerName || 'partner'} 🎯`}
+                onPress={handleSendToPartner}
+                loading={sendingToPartner}
+                disabled={sendingToPartner || accepting}
+                style={styles.sendPartnerBtn}
+              />
+
+              <TouchableOpacity
+                style={styles.skipBtn}
+                onPress={() => setSkipSheetVisible(true)}
+                disabled={accepting || skipping || !dareDropId}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.skipText}>
+                  Skip (−{POINTS.DARE_SKIP_PENALTY} pts)
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
 
@@ -555,6 +695,17 @@ const styles = StyleSheet.create({
   },
   acceptBtn: {
     marginBottom: 12,
+  },
+  sendPartnerBtn: {
+    marginBottom: 12,
+  },
+  partnerBanner: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 12,
+    opacity: 0.9,
   },
   skipBtn: {
     alignItems: 'center',

@@ -263,7 +263,12 @@ export default function Hesa10ButCreate({ navigation }) {
           <Text style={styles.headerTitle} numberOfLines={1}>
             He&apos;s a 10 But 💅
           </Text>
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Hes10History')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.historyLink}>History</Text>
+          </TouchableOpacity>
         </View>
 
         <KeyboardAvoidingView
@@ -416,6 +421,11 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 36,
+  },
+  historyLink: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: COLORS.purple,
   },
   scroll: {
     paddingHorizontal: SCREEN_PADDING,

@@ -143,6 +143,7 @@ export function findPendingRoundForUser(rounds, userId) {
     sorted.find(
       (round) =>
         round?.status === 'awaiting_rating' &&
+        round?.status !== 'cancelled' &&
         round?.creatorId &&
         round.creatorId !== userId &&
         round.partnerRating == null
@@ -425,6 +426,31 @@ export function canShowHes10Reveal(round) {
 export function shouldShowBotherNudge(rounds = []) {
   const rated = rounds.filter((round) => round?.partnerRating != null).slice(0, 3);
   return rated.length >= 3 && rated.every((round) => round.partnerRating >= 7);
+}
+
+export async function cancelHes10Round(coupleId, roundId, userId) {
+  try {
+    const ref = getHes10RoundRef(coupleId, roundId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error('Round not found.');
+
+    const data = snap.data();
+    if (data.creatorId !== userId) {
+      throw new Error('Only the sender can cancel this round.');
+    }
+    if (data.partnerRating != null) {
+      throw new Error('Already rated — cannot cancel.');
+    }
+
+    await updateDoc(ref, {
+      status: 'cancelled',
+      cancelledAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.warn('cancelHes10Round failed:', error.message);
+    throw error;
+  }
 }
 
 export function formatRoundDate(round) {

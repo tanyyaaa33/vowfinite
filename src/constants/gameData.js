@@ -1,3 +1,9 @@
+import { DAILY_QUESTIONS_CATALOG } from './dailyQuestionsCatalog';
+import { WHO_MORE_LIKELY } from './whoMoreLikelyCatalog';
+import { DARE_CATALOG } from './dareCatalog';
+
+export { DAILY_QUESTIONS_CATALOG, WHO_MORE_LIKELY, DARE_CATALOG };
+
 export const HUB_GAMES = [
   {
     id: 'daily-question',
@@ -104,72 +110,35 @@ export const GAMES = [
   },
 ];
 
-export const DAILY_QUESTIONS_CATALOG = [
-  { category: 'Deep', question: "What's one small thing I do that makes you feel loved?" },
-  { category: 'Funny', question: 'If we switched bodies for a day, what would you do first?' },
-  { category: 'Deep', question: "What's your favorite memory of us from this month?" },
-  { category: 'Romantic', question: 'What song reminds you of our relationship?' },
-  { category: 'Fun', question: 'If we could teleport anywhere right now, where would we go?' },
-  { category: 'Deep', question: "What's something new you'd love to try together?" },
-  { category: 'Funny', question: 'What is the most "us" thing we do without trying?' },
-  { category: 'Romantic', question: 'When did you first know you were falling for me?' },
-  { category: 'Fun', question: 'What would our couple superpower be?' },
-  { category: 'Deep', question: 'What do you need more of from me this week?' },
-];
+/** Day-of-year index so questions don't repeat every month like day-of-month did. */
+export function getCatalogIndexForDate(catalogLength, date = new Date()) {
+  if (!catalogLength) return 0;
+  const yearStart = new Date(date.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((date - yearStart) / 86400000);
+  return (dayOfYear + date.getFullYear() * 13) % catalogLength;
+}
 
-export function getTodayDailyQuestion() {
+export function getDailyQuestionForDate(date = new Date()) {
   if (!DAILY_QUESTIONS_CATALOG.length) {
     return { category: 'Deep', question: 'What makes you feel most loved?' };
   }
-  return DAILY_QUESTIONS_CATALOG[new Date().getDate() % DAILY_QUESTIONS_CATALOG.length];
+  const index = getCatalogIndexForDate(DAILY_QUESTIONS_CATALOG.length, date);
+  return DAILY_QUESTIONS_CATALOG[index];
+}
+
+export function getTodayDailyQuestion(date = new Date()) {
+  return getDailyQuestionForDate(date);
+}
+
+export function parseDateKey(dateKey) {
+  const [y, m, d] = String(dateKey || '').split('-').map(Number);
+  if (!y || !m || !d) return new Date();
+  return new Date(y, m - 1, d);
 }
 
 export const DAILY_QUESTIONS = DAILY_QUESTIONS_CATALOG.map((item) => item.question);
 
 export const WHO_MORE_LIKELY_BATCH_SIZE = 5;
-
-export const WHO_MORE_LIKELY = [
-  'Who\'s more likely to plan a surprise date?',
-  'Who\'s more likely to stay up late binge-watching?',
-  'Who\'s more likely to cry during a movie?',
-  'Who\'s more likely to forget an anniversary?',
-  'Who\'s more likely to start a dance party in the kitchen?',
-  'Who\'s more likely to apologize first after a fight?',
-  'Who\'s more likely to order dessert for the table?',
-  'Who\'s more likely to get lost even with GPS?',
-  'Who\'s more likely to send a good morning text?',
-  'Who\'s more likely to hog the blankets at night?',
-  'Who\'s more likely to suggest a spontaneous road trip?',
-  'Who\'s more likely to remember everyone\'s birthday?',
-  'Who\'s more likely to burn something while cooking?',
-  'Who\'s more likely to fall asleep during a movie?',
-  'Who\'s more likely to take forever getting ready?',
-  'Who\'s more likely to start singing in public?',
-  'Who\'s more likely to win an argument?',
-  'Who\'s more likely to be the bigger flirt?',
-  'Who\'s more likely to plan the vacation?',
-  'Who\'s more likely to spend money on something silly?',
-  'Who\'s more likely to get hangry?',
-  'Who\'s more likely to befriend a stranger?',
-  'Who\'s more likely to send a meme at 2 AM?',
-  'Who\'s more likely to cry at a wedding?',
-  'Who\'s more likely to be the designated photographer?',
-  'Who\'s more likely to suggest staying in over going out?',
-  'Who\'s more likely to have a secret snack stash?',
-  'Who\'s more likely to be the first one on the dance floor?',
-  'Who\'s more likely to forget where they parked?',
-  'Who\'s more likely to say "I love you" first?',
-  'Who\'s more likely to pick the restaurant?',
-  'Who\'s more likely to binge a new show in one weekend?',
-  'Who\'s more likely to be the cuddlier one?',
-  'Who\'s more likely to get competitive during a game?',
-  'Who\'s more likely to leave voice notes instead of texting?',
-  'Who\'s more likely to wake up early on a weekend?',
-  'Who\'s more likely to be the messy one?',
-  'Who\'s more likely to plan a picnic?',
-  'Who\'s more likely to talk to pets like they\'re people?',
-  'Who\'s more likely to suggest a couple selfie?',
-];
 
 export function getTodayWhoMoreLikelyQuestions(
   batchSize = WHO_MORE_LIKELY_BATCH_SIZE,
@@ -179,7 +148,7 @@ export function getTodayWhoMoreLikelyQuestions(
     return ['Who\'s more likely to plan a surprise date?'];
   }
 
-  const start = date.getDate() % WHO_MORE_LIKELY.length;
+  const start = getCatalogIndexForDate(WHO_MORE_LIKELY.length, date);
   const questions = [];
   for (let i = 0; i < batchSize; i += 1) {
     questions.push(WHO_MORE_LIKELY[(start + i) % WHO_MORE_LIKELY.length]);
@@ -207,57 +176,6 @@ export const DARE_CATEGORY_COLORS = {
   Fun: '#4CAF80',
 };
 
-export const DARE_CATALOG = [
-  {
-    id: 'voice-note',
-    text: 'Send your partner a voice note saying three things you love about them',
-    category: 'Right Now',
-    timeEstimate: '5 min',
-  },
-  {
-    id: 'surprise-15',
-    text: 'Plan a 15-minute surprise for your partner today',
-    category: 'Today',
-    timeEstimate: '15 min',
-  },
-  {
-    id: 'hidden-note',
-    text: 'Write a handwritten note and hide it somewhere they\'ll find it',
-    category: 'This Week',
-    timeEstimate: '10 min',
-  },
-  {
-    id: 'love-song',
-    text: 'Pick a song that describes your partner and share why',
-    category: 'Vulnerability',
-    timeEstimate: '8 min',
-  },
-  {
-    id: 'compliment-marathon',
-    text: 'Give your partner a 60-second compliment marathon',
-    category: 'Fun',
-    timeEstimate: '2 min',
-  },
-  {
-    id: 'coffee-run',
-    text: 'Pick up their favorite drink and leave it with a sweet note',
-    category: 'Today',
-    timeEstimate: '20 min',
-  },
-  {
-    id: 'memory-text',
-    text: 'Text them your favorite memory together and why it still matters',
-    category: 'Vulnerability',
-    timeEstimate: '5 min',
-  },
-  {
-    id: 'dance-kitchen',
-    text: 'Start a two-song kitchen dance party when you see them next',
-    category: 'Fun',
-    timeEstimate: '10 min',
-  },
-];
-
 export function getDareByIndex(index) {
   if (!DARE_CATALOG.length) {
     return {
@@ -272,7 +190,7 @@ export function getDareByIndex(index) {
 }
 
 export function getTodayDareIndex(date = new Date()) {
-  return date.getDate() % (DARE_CATALOG.length || 1);
+  return getCatalogIndexForDate(DARE_CATALOG.length || 1, date);
 }
 
 export function getTodayDare() {
@@ -286,6 +204,14 @@ export const HES10_INSPIRATION_CHIPS = [
   'takes 2 hours to get ready',
   'never initiates plans',
   'leaves cabinet doors open',
+  'checks their phone during dinner',
+  'sings in the shower way too loud',
+  'steals the covers every night',
+  'is always "five minutes away"',
+  'orders the same thing every time',
+  'takes forever to pick a movie',
+  'leaves wet towels on the bed',
+  'laughs at their own jokes first',
 ];
 
 export const HES10_PROMPTS = [

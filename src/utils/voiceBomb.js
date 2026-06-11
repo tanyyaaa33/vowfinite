@@ -112,6 +112,51 @@ export async function saveVoiceBombReaction(coupleId, voiceBombId, userId, react
   }
 }
 
+export function subscribeToVoiceBombHistory(coupleId, callback, onError) {
+  if (!coupleId) return () => {};
+
+  if (isGuestCoupleId(coupleId)) {
+    callback([]);
+    return () => {};
+  }
+
+  return onSnapshot(
+    collection(db, 'couples', coupleId, 'voiceBomb'),
+    (snap) => {
+      try {
+        const items = snap.docs
+          .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+          .sort((a, b) => {
+            const ta = a.createdAt?.seconds || 0;
+            const tb = b.createdAt?.seconds || 0;
+            return tb - ta;
+          });
+        callback(items);
+      } catch (error) {
+        console.warn('subscribeToVoiceBombHistory callback error:', error.message);
+        callback([]);
+      }
+    },
+    (error) => {
+      console.warn('subscribeToVoiceBombHistory error:', error.message);
+      onError?.(error);
+      callback([]);
+    }
+  );
+}
+
+export function findUnheardVoiceBomb(items, userId) {
+  if (!userId || !Array.isArray(items)) return null;
+  return (
+    items.find(
+      (item) =>
+        item.senderId !== userId &&
+        item.status !== 'replied' &&
+        !item.listenedBy
+    ) || null
+  );
+}
+
 export async function saveVoiceBombReply(coupleId, voiceBombId, userId, payload) {
   try {
     const ref = getVoiceBombRef(coupleId, voiceBombId);

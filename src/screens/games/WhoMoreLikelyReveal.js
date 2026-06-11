@@ -4,6 +4,8 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,6 +42,9 @@ import {
   getSessionQuestions,
   getUserAnswersMap,
   getPartnerAnswersMap,
+  saveWhoMoreLikelyArgument,
+  getUserArgumentFromDoc,
+  getPartnerArgumentFromDoc,
 } from '../../utils/whoMoreLikely';
 
 const PARTNER_GRADIENT = ['#C084FC', '#9B7EDE'];
@@ -181,6 +186,8 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionData, setSessionData] = useState(null);
   const [stats, setStats] = useState(couple?.whoMoreLikelyStats || null);
+  const [myArgument, setMyArgument] = useState('');
+  const [savingArgument, setSavingArgument] = useState(false);
 
   const pointsAwarded = useRef(false);
   const statsFinalized = useRef(false);
@@ -278,6 +285,11 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
         try {
           setSessionReady(true);
           setSessionData(docData);
+          if (docData && profile?.uid && membersRef.current.length) {
+            setMyArgument(
+              getUserArgumentFromDoc(docData, profile.uid, membersRef.current) || ''
+            );
+          }
           if (docData?.statsSnapshot) {
             setStats(docData.statsSnapshot);
           }
@@ -452,6 +464,56 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
           ))}
 
           <StatsCard stats={stats} matchCount={matchCount} questionCount={questionCount} />
+
+          {matchCount < questionCount && (
+            <View style={[styles.argumentCard, SHADOWS.card]}>
+              <Text style={styles.argumentTitle}>Disagree? Make your case</Text>
+              <Text style={styles.argumentHint}>
+                Add your side anytime — {partnerName} can reply when they open this.
+              </Text>
+              <TextInput
+                style={styles.argumentInput}
+                placeholder="Why did you pick differently?"
+                placeholderTextColor={COLORS.placeholder}
+                value={myArgument}
+                onChangeText={setMyArgument}
+                multiline
+                maxLength={280}
+              />
+              {sessionData && profile?.uid && memberList.length ? (
+                <TouchableOpacity
+                  style={styles.argumentSave}
+                  onPress={async () => {
+                    if (!myArgument.trim() || savingArgument) return;
+                    setSavingArgument(true);
+                    try {
+                      await saveWhoMoreLikelyArgument(
+                        profile.coupleId,
+                        dateKey || getDateKey(),
+                        profile.uid,
+                        memberList,
+                        myArgument.trim()
+                      );
+                    } catch (error) {
+                      console.warn('save argument failed:', error.message);
+                    } finally {
+                      setSavingArgument(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.argumentSaveText}>
+                    {savingArgument ? 'Saving...' : 'Save my take'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              {sessionData && profile?.uid && memberList.length ? (
+                <Text style={styles.partnerArgument} numberOfLines={4}>
+                  {getPartnerArgumentFromDoc(sessionData, profile.uid, memberList) ||
+                    `${partnerName} hasn't shared their take yet.`}
+                </Text>
+              ) : null}
+            </View>
+          )}
 
           <GradientButton
             title="Back to Games"
@@ -665,5 +727,57 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 4,
+  },
+  argumentCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  argumentTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  argumentHint: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginBottom: 12,
+    lineHeight: 17,
+  },
+  argumentInput: {
+    backgroundColor: COLORS.screenBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 12,
+    minHeight: 80,
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    textAlignVertical: 'top',
+    marginBottom: 10,
+  },
+  argumentSave: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 10,
+  },
+  argumentSaveText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: COLORS.pink,
+  },
+  partnerArgument: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontStyle: 'italic',
+    lineHeight: 18,
   },
 });

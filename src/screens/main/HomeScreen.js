@@ -137,6 +137,19 @@ export default function HomeScreen({ navigation }) {
             )}
           </View>
 
+          <TouchableOpacity
+            onPress={() => navigation.navigate('MemoryLane')}
+            activeOpacity={0.85}
+            style={[styles.memoryCard, SHADOWS.card]}
+          >
+            <Text style={styles.memoryEmoji}>📖</Text>
+            <View style={styles.memoryTextWrap}>
+              <Text style={styles.memoryTitle}>Memory Lane</Text>
+              <Text style={styles.memorySub}>Past answers, voice bombs & moments</Text>
+            </View>
+            <Text style={styles.memoryArrow}>→</Text>
+          </TouchableOpacity>
+
           <Text style={styles.sectionTitle}>Today's Connection</Text>
           <TouchableOpacity
             onPress={() => {
@@ -309,6 +322,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     marginTop: 10,
+  },
+  memoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
+  },
+  memoryEmoji: { fontSize: 28 },
+  memoryTextWrap: { flex: 1, minWidth: 0 },
+  memoryTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 15,
+    color: COLORS.textPrimary,
+  },
+  memorySub: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  memoryArrow: {
+    fontFamily: FONTS.medium,
+    fontSize: 18,
+    color: COLORS.pink,
   },
   sectionTitle: {
     fontFamily: FONTS.semiBold,

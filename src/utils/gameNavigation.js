@@ -30,8 +30,15 @@ export function getGameNavigationTarget(gameId, context = {}) {
       return { screen: 'WhoMoreLikelyQuestion', params: {} };
     }
 
-    case 'dare-drop':
+    case 'dare-drop': {
+      const partnerDare = sessions.find?.(
+        (s) => s.gameId === 'dare-drop' && s.stage === 'sent_to_partner'
+      );
+      if (partnerDare?.dareDropId) {
+        return { screen: 'DareDropDare', params: { dareDropId: partnerDare.dareDropId } };
+      }
       return { screen: 'DareDropDare', params: {} };
+    }
 
     case 'voice-bomb': {
       const todayKey = new Date().toISOString().slice(0, 10);
