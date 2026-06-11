@@ -28,6 +28,7 @@ import { SCREEN_PADDING, CONTENT_MAX_WIDTH } from '../../constants/layout';
 import { VOICE_BOMB_BG, getTodayVoiceBombPrompt, RECORD_MAX_SECONDS } from '../../constants/voiceBomb';
 import { uploadVoiceRecording } from '../../utils/firebase';
 import { createVoiceBomb } from '../../utils/voiceBomb';
+import { isGuestCoupleId, showGuestSignupPrompt } from '../../utils/guestMode';
 import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
 import { POINTS } from '../../utils/points';
 
@@ -83,6 +84,11 @@ export default function VoiceBombRecord({ navigation }) {
 
     if (!profile?.coupleId || !profile?.uid) {
       Alert.alert('Connect first', 'Link with your partner to send a voice bomb.');
+      return;
+    }
+
+    if (isGuestCoupleId(profile.coupleId)) {
+      showGuestSignupPrompt('Create a free account to send voice bombs to your partner.');
       return;
     }
 

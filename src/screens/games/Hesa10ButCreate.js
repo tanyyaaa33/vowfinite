@@ -22,6 +22,7 @@ import { HES10_INSPIRATION_CHIPS } from '../../constants/gameData';
 import { useCouple } from '../../hooks/useCouple';
 import { saveGameSession, getCoupleMemberIds } from '../../utils/firebase';
 import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
+import { navigateToGamesHub } from '../../utils/gameNavigation';
 import {
   getHes10Starter,
   buildFullSentence,
@@ -343,13 +344,7 @@ export default function Hesa10ButCreate({ navigation }) {
             {waiting ? (
               <GradientButton
                 title="Back to Games"
-                onPress={() => {
-                  try {
-                    navigation.navigate('Games');
-                  } catch (error) {
-                    navigation.goBack();
-                  }
-                }}
+                onPress={() => navigateToGamesHub(navigation)}
               />
             ) : (
               <GradientButton

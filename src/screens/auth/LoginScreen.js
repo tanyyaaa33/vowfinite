@@ -10,7 +10,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Keyboard,
 } from 'react-native';
+import KeyboardContinueAccessory from '../../components/KeyboardContinueAccessory';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
@@ -25,6 +27,8 @@ import {
   auth,
 } from '../../utils/firebase';
 import { formatAuthError } from '../../utils/authErrors';
+
+const INPUT_ACCESSORY_ID = 'loginAccessory';
 
 export default function LoginScreen({ navigation }) {
   const { enterGuestMode, exitGuestMode, isGuest } = useContext(AuthContext);
@@ -65,6 +69,7 @@ export default function LoginScreen({ navigation }) {
       exitGuestMode();
     }
 
+    Keyboard.dismiss();
     setLoading(true);
     try {
       if (isSignUp) {
@@ -96,12 +101,16 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  const canSubmit = Boolean(email.trim() && password.trim());
+
   return (
+    <>
     <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         >
           <ScrollView
             contentContainerStyle={styles.scroll}
@@ -126,6 +135,8 @@ export default function LoginScreen({ navigation }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                returnKeyType="next"
+                inputAccessoryViewID={Platform.OS === 'ios' ? INPUT_ACCESSORY_ID : undefined}
               />
 
               <Text style={styles.label}>Password</Text>
@@ -136,6 +147,9 @@ export default function LoginScreen({ navigation }) {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
+                returnKeyType="done"
+                onSubmitEditing={handleAuth}
+                inputAccessoryViewID={Platform.OS === 'ios' ? INPUT_ACCESSORY_ID : undefined}
               />
 
               <GradientButton
@@ -166,6 +180,13 @@ export default function LoginScreen({ navigation }) {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
+    <KeyboardContinueAccessory
+      nativeID={INPUT_ACCESSORY_ID}
+      onPress={handleAuth}
+      disabled={!canSubmit || loading}
+      label={isSignUp ? 'Create Account' : 'Sign In'}
+    />
+    </>
   );
 }
 
@@ -176,8 +197,8 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    paddingBottom: 40,
-    justifyContent: 'center',
+    paddingTop: 24,
+    paddingBottom: 48,
   },
   header: {
     alignItems: 'center',

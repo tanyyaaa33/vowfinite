@@ -408,7 +408,7 @@ export default function DailyQuestionAnswer({ navigation, route }) {
                   We&apos;ll notify you when it&apos;s time to reveal.
                 </Text>
               </View>
-            ) : !waiting || editing ? (
+            ) : (
               <>
                 <Text style={styles.inputLabel}>Your answer</Text>
                 <View style={styles.inputWrap}>
@@ -732,5 +732,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SCREEN_PADDING,
     paddingBottom: 12,
     paddingTop: 8,
+    gap: 12,
   },
 });

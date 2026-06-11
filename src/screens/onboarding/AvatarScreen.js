@@ -1,12 +1,11 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import GradientButton from '../../components/GradientButton';
 import AvatarCircle from '../../components/AvatarCircle';
 import ProgressBar from '../../components/ProgressBar';
-import { COLORS, GRADIENTS } from '../../constants/colors';
+import OnboardingScreenLayout from '../../components/OnboardingScreenLayout';
+import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { AuthContext } from '../../context/AuthContext';
 import { uploadAvatar, saveUserProfile } from '../../utils/firebase';
@@ -55,65 +54,54 @@ export default function AvatarScreen({ navigation }) {
   };
 
   return (
-    <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.container}>
-          <Text style={styles.stepLabel}>Step 4 of 6</Text>
-          <ProgressBar progress={4 / 6} />
-          <Text style={styles.emoji}>📸</Text>
-          <Text style={styles.title}>Choose your look</Text>
-          <Text style={styles.subtitle}>Upload a photo or pick a fun avatar</Text>
+    <OnboardingScreenLayout onBack={() => navigation.goBack()}>
+      <Text style={styles.stepLabel}>Step 4 of 6</Text>
+      <ProgressBar progress={4 / 6} />
+      <Text style={styles.emoji}>📸</Text>
+      <Text style={styles.title}>Choose your look</Text>
+      <Text style={styles.subtitle}>Upload a photo or pick a fun avatar</Text>
 
-          <TouchableOpacity onPress={pickImage} style={styles.avatarWrapper}>
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-            ) : selectedEmoji ? (
-              <View style={styles.emojiAvatar}>
-                <Text style={styles.emojiAvatarText}>{selectedEmoji}</Text>
-              </View>
-            ) : (
-              <AvatarCircle initial={profile?.name} size={120} />
-            )}
-            <Text style={styles.tapHint}>Tap to upload photo</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.orText}>or pick an emoji</Text>
-          <View style={styles.emojiGrid}>
-            {AVATAR_EMOJIS.map((emoji) => (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => {
-                  setSelectedEmoji(emoji);
-                  setAvatarUri(null);
-                }}
-                style={[styles.emojiOption, selectedEmoji === emoji && styles.emojiSelected]}
-              >
-                <Text style={styles.emojiText}>{emoji}</Text>
-              </TouchableOpacity>
-            ))}
+      <TouchableOpacity onPress={pickImage} style={styles.avatarWrapper}>
+        {avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+        ) : selectedEmoji ? (
+          <View style={styles.emojiAvatar}>
+            <Text style={styles.emojiAvatarText}>{selectedEmoji}</Text>
           </View>
+        ) : (
+          <AvatarCircle initial={profile?.name} size={120} />
+        )}
+        <Text style={styles.tapHint}>Tap to upload photo</Text>
+      </TouchableOpacity>
 
-          <GradientButton
-            title="Continue"
-            onPress={handleNext}
-            loading={loading}
-            disabled={!avatarUri && !selectedEmoji}
-            style={styles.button}
-          />
-        </View>
-      </SafeAreaView>
-    </LinearGradient>
+      <Text style={styles.orText}>or pick an emoji</Text>
+      <View style={styles.emojiGrid}>
+        {AVATAR_EMOJIS.map((emoji) => (
+          <TouchableOpacity
+            key={emoji}
+            onPress={() => {
+              setSelectedEmoji(emoji);
+              setAvatarUri(null);
+            }}
+            style={[styles.emojiOption, selectedEmoji === emoji && styles.emojiSelected]}
+          >
+            <Text style={styles.emojiText}>{emoji}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <GradientButton
+        title="Continue"
+        onPress={handleNext}
+        loading={loading}
+        disabled={!avatarUri && !selectedEmoji}
+        style={styles.button}
+      />
+    </OnboardingScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safe: { flex: 1 },
-  container: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 20,
-  },
   emoji: { fontSize: 48, textAlign: 'center', marginBottom: 16, marginTop: 16 },
   title: {
     fontFamily: FONTS.display,
@@ -191,5 +179,5 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.screenBg,
   },
   emojiText: { fontSize: 26 },
-  button: { marginTop: 'auto', marginBottom: 20 },
+  button: { marginTop: 28 },
 });

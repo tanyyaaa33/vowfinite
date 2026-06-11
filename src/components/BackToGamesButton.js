@@ -1,15 +1,10 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import GradientButton from './GradientButton';
+import { navigateToGamesHub } from '../utils/gameNavigation';
 
 export default function BackToGamesButton({ navigation, title = 'Back to Games', style }) {
-  const goBack = () => {
-    try {
-      navigation.navigate('Games');
-    } catch {
-      navigation.goBack();
-    }
-  };
+  const goBack = () => navigateToGamesHub(navigation);
 
   return (
     <GradientButton title={title} onPress={goBack} style={[styles.btn, style]} />
@@ -17,7 +12,5 @@ export default function BackToGamesButton({ navigation, title = 'Back to Games',
 }
 
 const styles = StyleSheet.create({
-  btn: {
-    marginTop: 8,
-  },
+  btn: {},
 });

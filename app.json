@@ -53,7 +53,8 @@
         {
           "microphonePermission": "VowFinity needs microphone access so you can record voice bombs for your partner."
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

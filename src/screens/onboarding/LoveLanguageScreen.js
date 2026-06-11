@@ -1,10 +1,9 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import GradientButton from '../../components/GradientButton';
 import ProgressBar from '../../components/ProgressBar';
-import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
+import OnboardingScreenLayout from '../../components/OnboardingScreenLayout';
+import { COLORS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { LOVE_LANGUAGES } from '../../constants/gameData';
 import { AuthContext } from '../../context/AuthContext';
@@ -29,45 +28,40 @@ export default function LoveLanguageScreen({ navigation }) {
   };
 
   return (
-    <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
-      <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <Text style={styles.stepLabel}>Step 5 of 6</Text>
-          <ProgressBar progress={5 / 6} />
-          <Text style={styles.emoji}>💝</Text>
-          <Text style={styles.title}>Your love language</Text>
-          <Text style={styles.subtitle}>How do you feel most loved?</Text>
+    <OnboardingScreenLayout onBack={() => navigation.goBack()}>
+      <Text style={styles.stepLabel}>Step 5 of 6</Text>
+      <ProgressBar progress={5 / 6} />
+      <Text style={styles.emoji}>💝</Text>
+      <Text style={styles.title}>Your love language</Text>
+      <Text style={styles.subtitle}>How do you feel most loved?</Text>
 
-          {LOVE_LANGUAGES.map((lang) => (
-            <TouchableOpacity
-              key={lang.id}
-              onPress={() => setSelected(lang.id)}
-              activeOpacity={0.8}
-              style={[styles.option, selected === lang.id && styles.optionSelected, SHADOWS.card]}
-            >
-              <Text style={styles.optionEmoji}>{lang.emoji}</Text>
-              <Text style={[styles.optionLabel, selected === lang.id && styles.optionLabelSelected]}>
-                {lang.label}
-              </Text>
-              {selected === lang.id && <Text style={styles.check}>✓</Text>}
-            </TouchableOpacity>
-          ))}
+      {LOVE_LANGUAGES.map((lang) => (
+        <TouchableOpacity
+          key={lang.id}
+          onPress={() => setSelected(lang.id)}
+          activeOpacity={0.8}
+          style={[styles.option, selected === lang.id && styles.optionSelected, SHADOWS.card]}
+        >
+          <Text style={styles.optionEmoji}>{lang.emoji}</Text>
+          <Text style={[styles.optionLabel, selected === lang.id && styles.optionLabelSelected]}>
+            {lang.label}
+          </Text>
+          {selected === lang.id && <Text style={styles.check}>✓</Text>}
+        </TouchableOpacity>
+      ))}
 
-          <GradientButton title="Continue" onPress={handleNext} loading={loading} disabled={!selected} style={styles.button} />
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+      <GradientButton
+        title="Continue"
+        onPress={handleNext}
+        loading={loading}
+        disabled={!selected}
+        style={styles.button}
+      />
+    </OnboardingScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safe: { flex: 1 },
-  scroll: {
-    paddingHorizontal: 28,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
   emoji: { fontSize: 48, textAlign: 'center', marginBottom: 16, marginTop: 16 },
   title: {
     fontFamily: FONTS.display,

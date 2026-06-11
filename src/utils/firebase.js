@@ -259,21 +259,36 @@ export async function uploadAvatar(userId, uri) {
   }
 }
 
+function uriToBlob(uri) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => resolve(xhr.response);
+    xhr.onerror = () => reject(new TypeError('Could not read the voice recording.'));
+    xhr.responseType = 'blob';
+    xhr.open('GET', uri, true);
+    xhr.send(null);
+  });
+}
+
 export async function uploadVoiceRecording(coupleId, voiceBombId, uri, kind = 'message') {
   try {
     if (!coupleId || !voiceBombId || !uri) {
       throw new Error('Missing recording upload details.');
     }
-    const response = await fetch(uri);
-    if (!response.ok) {
+    if (isGuestCoupleId(coupleId)) {
+      throw new Error('Create a free account to send voice bombs to your partner.');
+    }
+
+    const blob = await uriToBlob(uri);
+    if (!blob || blob.size === 0) {
       throw new Error('Could not read the voice recording.');
     }
-    const blob = await response.blob();
+
     const storageRef = ref(
       storage,
       `voiceBombs/${coupleId}/${voiceBombId}_${kind}.m4a`
     );
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, blob, { contentType: 'audio/mp4' });
     return getDownloadURL(storageRef);
   } catch (error) {
     console.warn('uploadVoiceRecording failed:', error.message);

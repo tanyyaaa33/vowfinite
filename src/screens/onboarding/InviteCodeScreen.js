@@ -7,15 +7,19 @@ import {
   TouchableOpacity,
   Alert,
   Share,
+  Platform,
+  Keyboard,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientButton from '../../components/GradientButton';
 import ProgressBar from '../../components/ProgressBar';
-import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
+import OnboardingScreenLayout from '../../components/OnboardingScreenLayout';
+import KeyboardContinueAccessory from '../../components/KeyboardContinueAccessory';
+import { COLORS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { AuthContext } from '../../context/AuthContext';
-import { createCouple, joinCouple, saveUserProfile } from '../../utils/firebase';
+import { auth, createCouple, joinCouple, saveUserProfile, signOut } from '../../utils/firebase';
+
+const INPUT_ACCESSORY_ID = 'inviteCodeAccessory';
 
 function generateCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -26,12 +30,14 @@ function generateCode() {
   return code;
 }
 
-export default function InviteCodeScreen() {
+export default function InviteCodeScreen({ navigation }) {
   const { user, refreshProfile } = useContext(AuthContext);
   const [mode, setMode] = useState('choose');
   const [myCode, setMyCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const canJoin = joinCode.trim().length >= 6;
 
   const handleCreate = async () => {
     setLoading(true);
@@ -50,10 +56,11 @@ export default function InviteCodeScreen() {
   };
 
   const handleJoin = async () => {
-    if (joinCode.trim().length < 6) {
+    if (!canJoin) {
       Alert.alert('Invalid code', 'Please enter a 6-character invite code.');
       return;
     }
+    Keyboard.dismiss();
     setLoading(true);
     try {
       const coupleId = await joinCouple(user.uid, joinCode.trim());
@@ -70,6 +77,26 @@ export default function InviteCodeScreen() {
     }
   };
 
+  const handleBack = () => {
+    if (mode === 'join') {
+      setJoinCode('');
+      setMode('choose');
+      return;
+    }
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    Alert.alert('Leave setup?', 'You will return to sign in.', [
+      { text: 'Stay', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: () => signOut(auth),
+      },
+    ]);
+  };
+
   const shareCode = async () => {
     try {
       await Share.share({
@@ -84,81 +111,86 @@ export default function InviteCodeScreen() {
 
   if (mode === 'created') {
     return (
-      <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
-        <SafeAreaView style={styles.safe}>
-          <View style={styles.container}>
-            <Text style={styles.stepLabel}>Step 6 of 6</Text>
-            <ProgressBar progress={1} />
-            <Text style={styles.emoji}>🎉</Text>
-            <Text style={styles.title}>Your invite code</Text>
-            <Text style={styles.subtitle}>Share this with your partner so you can connect</Text>
-            <View style={[styles.codeBox, SHADOWS.strong]}>
-              <Text style={styles.codeText}>{myCode}</Text>
-            </View>
-            <GradientButton title="Share Code" onPress={shareCode} style={styles.button} />
-            <Text style={styles.waitHint}>Waiting for your partner to join...</Text>
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
+      <OnboardingScreenLayout>
+        <Text style={styles.stepLabel}>Step 6 of 6</Text>
+        <ProgressBar progress={1} />
+        <Text style={styles.emoji}>🎉</Text>
+        <Text style={styles.title}>Your invite code</Text>
+        <Text style={styles.subtitle}>Share this with your partner so you can connect</Text>
+        <View style={[styles.codeBox, SHADOWS.strong]}>
+          <Text style={styles.codeText}>{myCode}</Text>
+        </View>
+        <GradientButton title="Share Code" onPress={shareCode} style={styles.button} />
+        <Text style={styles.waitHint}>Waiting for your partner to join...</Text>
+      </OnboardingScreenLayout>
     );
   }
 
   return (
-    <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.container}>
-          <Text style={styles.stepLabel}>Step 6 of 6</Text>
-          <ProgressBar progress={1} />
-          <Text style={styles.emoji}>🔗</Text>
-          <Text style={styles.title}>Connect with your partner</Text>
-          <Text style={styles.subtitle}>Create a code or join with theirs</Text>
+    <>
+      <OnboardingScreenLayout onBack={handleBack}>
+        <Text style={styles.stepLabel}>Step 6 of 6</Text>
+        <ProgressBar progress={1} />
+        <Text style={styles.emoji}>🔗</Text>
+        <Text style={styles.title}>Connect with your partner</Text>
+        <Text style={styles.subtitle}>Create a code or join with theirs</Text>
 
-          {mode === 'choose' && (
-            <>
-              <TouchableOpacity onPress={() => setMode('join')} style={[styles.modeCard, SHADOWS.card]}>
-                <Text style={styles.modeEmoji}>💌</Text>
-                <View>
-                  <Text style={styles.modeTitle}>I have a code</Text>
-                  <Text style={styles.modeDesc}>Enter your partner's invite code</Text>
-                </View>
-              </TouchableOpacity>
-              <GradientButton title="Create Invite Code" onPress={handleCreate} loading={loading} style={styles.button} />
-            </>
-          )}
+        {mode === 'choose' && (
+          <>
+            <TouchableOpacity onPress={() => setMode('join')} style={[styles.modeCard, SHADOWS.card]}>
+              <Text style={styles.modeEmoji}>💌</Text>
+              <View>
+                <Text style={styles.modeTitle}>I have a code</Text>
+                <Text style={styles.modeDesc}>Enter your partner's invite code</Text>
+              </View>
+            </TouchableOpacity>
+            <GradientButton
+              title="Create Invite Code"
+              onPress={handleCreate}
+              loading={loading}
+              style={styles.button}
+            />
+          </>
+        )}
 
-          {mode === 'join' && (
-            <>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter 6-digit code"
-                placeholderTextColor={COLORS.placeholder}
-                value={joinCode}
-                onChangeText={(t) => setJoinCode(t.toUpperCase())}
-                maxLength={6}
-                autoCapitalize="characters"
-                autoFocus
-              />
-              <GradientButton title="Join Partner" onPress={handleJoin} loading={loading} style={styles.button} />
-              <TouchableOpacity onPress={() => setMode('choose')} style={styles.backLink}>
-                <Text style={styles.backText}>← Go back</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </SafeAreaView>
-    </LinearGradient>
+        {mode === 'join' && (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter 6-digit code"
+              placeholderTextColor={COLORS.placeholder}
+              value={joinCode}
+              onChangeText={(t) => setJoinCode(t.toUpperCase())}
+              maxLength={6}
+              autoCapitalize="characters"
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleJoin}
+              inputAccessoryViewID={Platform.OS === 'ios' ? INPUT_ACCESSORY_ID : undefined}
+            />
+            <GradientButton
+              title="Join Partner"
+              onPress={handleJoin}
+              loading={loading}
+              disabled={!canJoin}
+              style={styles.button}
+            />
+          </>
+        )}
+      </OnboardingScreenLayout>
+      {mode === 'join' ? (
+        <KeyboardContinueAccessory
+          nativeID={INPUT_ACCESSORY_ID}
+          onPress={handleJoin}
+          disabled={!canJoin || loading}
+          label="Join Partner"
+        />
+      ) : null}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safe: { flex: 1 },
-  container: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 20,
-    justifyContent: 'center',
-  },
   emoji: { fontSize: 48, textAlign: 'center', marginBottom: 16, marginTop: 32 },
   title: {
     fontFamily: FONTS.display,
@@ -233,12 +265,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     marginTop: 20,
-  },
-  backLink: { marginTop: 16, alignItems: 'center' },
-  backText: {
-    fontFamily: FONTS.medium,
-    fontSize: 14,
-    color: COLORS.pink,
   },
   stepLabel: {
     fontFamily: FONTS.medium,

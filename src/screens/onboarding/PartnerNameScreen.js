@@ -4,16 +4,16 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   TouchableOpacity,
+  Platform,
+  Keyboard,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientButton from '../../components/GradientButton';
 import ProgressBar from '../../components/ProgressBar';
-import { COLORS, GRADIENTS } from '../../constants/colors';
+import OnboardingScreenLayout from '../../components/OnboardingScreenLayout';
+import KeyboardContinueAccessory from '../../components/KeyboardContinueAccessory';
+import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { AuthContext } from '../../context/AuthContext';
 import { saveUserProfile } from '../../utils/firebase';
@@ -24,14 +24,19 @@ const PRONOUN_OPTIONS = [
   { id: 'they', label: 'They / Them' },
 ];
 
+const INPUT_ACCESSORY_ID = 'partnerNameAccessory';
+
 export default function PartnerNameScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [partnerName, setPartnerName] = useState('');
   const [partnerGender, setPartnerGender] = useState('they');
   const [loading, setLoading] = useState(false);
 
+  const canContinue = Boolean(partnerName.trim());
+
   const handleNext = async () => {
-    if (!user?.uid || !partnerName.trim()) return;
+    if (!user?.uid || !canContinue) return;
+    Keyboard.dismiss();
     setLoading(true);
     try {
       await saveUserProfile(user.uid, {
@@ -47,65 +52,66 @@ export default function PartnerNameScreen({ navigation }) {
   };
 
   return (
-    <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
-      <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-          <View style={styles.container}>
-            <Text style={styles.stepLabel}>Step 2 of 6</Text>
-            <ProgressBar progress={2 / 6} />
-            <Text style={styles.emoji}>💑</Text>
-            <Text style={styles.title}>Who's your person?</Text>
-            <Text style={styles.subtitle}>We'll use this to make everything feel personal</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Partner's name"
-              placeholderTextColor={COLORS.placeholder}
-              value={partnerName}
-              onChangeText={setPartnerName}
-              autoFocus
-            />
+    <>
+      <OnboardingScreenLayout onBack={() => navigation.goBack()}>
+        <Text style={styles.stepLabel}>Step 2 of 6</Text>
+        <ProgressBar progress={2 / 6} />
+        <Text style={styles.emoji}>💑</Text>
+        <Text style={styles.title}>Who's your person?</Text>
+        <Text style={styles.subtitle}>We'll use this to make everything feel personal</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Partner's name"
+          placeholderTextColor={COLORS.placeholder}
+          value={partnerName}
+          onChangeText={setPartnerName}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={handleNext}
+          inputAccessoryViewID={Platform.OS === 'ios' ? INPUT_ACCESSORY_ID : undefined}
+        />
 
-            <Text style={styles.pronounLabel}>Pronouns (for He&apos;s a 10 But)</Text>
-            <View style={styles.pronounRow}>
-              {PRONOUN_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  style={[
-                    styles.pronounChip,
-                    partnerGender === option.id && styles.pronounChipActive,
-                  ]}
-                  onPress={() => setPartnerGender(option.id)}
-                >
-                  <Text
-                    style={[
-                      styles.pronounChipText,
-                      partnerGender === option.id && styles.pronounChipTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+        <Text style={styles.pronounLabel}>Pronouns (for He&apos;s a 10 But)</Text>
+        <View style={styles.pronounRow}>
+          {PRONOUN_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.pronounChip,
+                partnerGender === option.id && styles.pronounChipActive,
+              ]}
+              onPress={() => setPartnerGender(option.id)}
+            >
+              <Text
+                style={[
+                  styles.pronounChipText,
+                  partnerGender === option.id && styles.pronounChipTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-            <GradientButton title="Continue" onPress={handleNext} loading={loading} disabled={!partnerName.trim()} style={styles.button} />
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </LinearGradient>
+        <GradientButton
+          title="Continue"
+          onPress={handleNext}
+          loading={loading}
+          disabled={!canContinue}
+          style={styles.button}
+        />
+      </OnboardingScreenLayout>
+      <KeyboardContinueAccessory
+        nativeID={INPUT_ACCESSORY_ID}
+        onPress={handleNext}
+        disabled={!canContinue || loading}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safe: { flex: 1 },
-  flex: { flex: 1 },
-  container: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 20,
-    justifyContent: 'center',
-  },
   emoji: { fontSize: 48, textAlign: 'center', marginBottom: 16, marginTop: 32 },
   title: {
     fontFamily: FONTS.display,

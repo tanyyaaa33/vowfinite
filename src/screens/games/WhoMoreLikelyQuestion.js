@@ -40,6 +40,7 @@ import { nudgePartner } from '../../utils/nudgePartner';
 import {
   subscribeToWhoMoreLikely,
   submitWhoMoreLikelyAnswer,
+  buildWhoMoreLikelyMemberList,
   hasUserCompletedAll,
   getUserAnswersMap,
   getPartnerAnswersMap,
@@ -139,7 +140,7 @@ function ChoiceButton({
 }
 
 export default function WhoMoreLikelyQuestion({ navigation }) {
-  const { profile } = useContext(AuthContext);
+  const { profile, isGuest } = useContext(AuthContext);
   const { couple, loading: coupleLoading } = useCouple();
 
   const questions = useMemo(() => getTodayWhoMoreLikelyQuestions(), []);
@@ -194,11 +195,17 @@ export default function WhoMoreLikelyQuestion({ navigation }) {
   }, [profile?.coupleId]);
 
   const resolveMemberList = useCallback(() => {
-    if (membersRef.current.length) return membersRef.current;
-    if (couple?.members?.length) return couple.members;
-    if (profile?.uid) return [profile.uid];
-    return [];
-  }, [couple?.members, profile?.uid]);
+    const members =
+      couple?.members?.length >= 2
+        ? couple.members
+        : membersRef.current.length >= 2
+          ? membersRef.current
+          : couple?.members?.length
+            ? couple.members
+            : membersRef.current;
+
+    return buildWhoMoreLikelyMemberList(members, profile?.uid, { isGuest });
+  }, [couple?.members, profile?.uid, isGuest]);
 
   const navigateToReveal = useCallback(
     (docData) => {

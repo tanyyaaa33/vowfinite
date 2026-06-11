@@ -1,21 +1,26 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TextInput, StyleSheet, Alert, Platform, Keyboard } from 'react-native';
 import GradientButton from '../../components/GradientButton';
 import ProgressBar from '../../components/ProgressBar';
-import { COLORS, GRADIENTS } from '../../constants/colors';
+import OnboardingScreenLayout from '../../components/OnboardingScreenLayout';
+import KeyboardContinueAccessory from '../../components/KeyboardContinueAccessory';
+import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { AuthContext } from '../../context/AuthContext';
 import { saveUserProfile } from '../../utils/firebase';
+
+const INPUT_ACCESSORY_ID = 'startDateAccessory';
 
 export default function StartDateScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [date, setDate] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const canContinue = date.length >= 10;
+
   const handleNext = async () => {
-    if (!user?.uid || !date.trim()) return;
+    if (!user?.uid || !date.trim() || !canContinue) return;
+    Keyboard.dismiss();
     setLoading(true);
     try {
       await saveUserProfile(user.uid, { startDate: date.trim() });
@@ -35,43 +40,45 @@ export default function StartDateScreen({ navigation }) {
   };
 
   return (
-    <LinearGradient colors={GRADIENTS.soft} style={styles.gradient}>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.container}>
-          <Text style={styles.stepLabel}>Step 3 of 6</Text>
-          <ProgressBar progress={3 / 6} />
-          <Text style={styles.emoji}>📅</Text>
-          <Text style={styles.title}>When did you start dating?</Text>
-          <Text style={styles.subtitle}>We'll celebrate your milestones together</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="MM/DD/YYYY"
-            placeholderTextColor={COLORS.placeholder}
-            value={date}
-            onChangeText={(t) => setDate(formatDate(t))}
-            keyboardType="number-pad"
-            maxLength={10}
-          />
-          <View style={styles.daysCard}>
-            <Text style={styles.daysLabel}>Every day together counts</Text>
-            <Text style={styles.daysHint}>We'll show your love timeline on your home screen</Text>
-          </View>
-          <GradientButton title="Continue" onPress={handleNext} loading={loading} disabled={date.length < 10} style={styles.button} />
+    <>
+      <OnboardingScreenLayout onBack={() => navigation.goBack()}>
+        <Text style={styles.stepLabel}>Step 3 of 6</Text>
+        <ProgressBar progress={3 / 6} />
+        <Text style={styles.emoji}>📅</Text>
+        <Text style={styles.title}>When did you start dating?</Text>
+        <Text style={styles.subtitle}>We'll celebrate your milestones together</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="MM/DD/YYYY"
+          placeholderTextColor={COLORS.placeholder}
+          value={date}
+          onChangeText={(t) => setDate(formatDate(t))}
+          keyboardType="number-pad"
+          maxLength={10}
+          inputAccessoryViewID={Platform.OS === 'ios' ? INPUT_ACCESSORY_ID : undefined}
+        />
+        <View style={styles.daysCard}>
+          <Text style={styles.daysLabel}>Every day together counts</Text>
+          <Text style={styles.daysHint}>We'll show your love timeline on your home screen</Text>
         </View>
-      </SafeAreaView>
-    </LinearGradient>
+        <GradientButton
+          title="Continue"
+          onPress={handleNext}
+          loading={loading}
+          disabled={!canContinue}
+          style={styles.button}
+        />
+      </OnboardingScreenLayout>
+      <KeyboardContinueAccessory
+        nativeID={INPUT_ACCESSORY_ID}
+        onPress={handleNext}
+        disabled={!canContinue || loading}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safe: { flex: 1 },
-  container: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 20,
-    justifyContent: 'center',
-  },
   emoji: { fontSize: 48, textAlign: 'center', marginBottom: 16, marginTop: 32 },
   title: {
     fontFamily: FONTS.display,

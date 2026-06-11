@@ -1,6 +1,20 @@
 import { getDailyQuestionStatus, getWhoMoreLikelyStatus } from './gamesHub';
 import { getHes10NavigationTarget } from './hes10But';
 
+export function navigateToGamesHub(navigation) {
+  if (!navigation?.navigate) return;
+
+  try {
+    navigation.navigate('MainTabs', { screen: 'Games' });
+  } catch (error) {
+    try {
+      navigation.goBack();
+    } catch {
+      console.warn('navigateToGamesHub failed:', error?.message);
+    }
+  }
+}
+
 export function getGameNavigationTarget(gameId, context = {}) {
   const {
     sessions = [],

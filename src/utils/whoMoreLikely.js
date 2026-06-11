@@ -8,12 +8,125 @@ import {
   serverTimestamp,
 } from './firebase';
 import { getDateKey } from './points';
-import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
+import { isGuestCoupleId } from './guestMode';
 import { getPlayerSlot } from './dailyQuestion';
+import { GUEST_USER_ID, GUEST_PARTNER_ID } from '../constants/guestData';
 import {
   getTodayWhoMoreLikelyQuestions,
   WHO_MORE_LIKELY_BATCH_SIZE,
 } from '../constants/gameData';
+
+const guestSessions = new Map();
+const guestSubscribers = new Map();
+
+export function buildWhoMoreLikelyMemberList(members = [], userId, { isGuest = false } = {}) {
+  const base = [...new Set([...(members || []), userId].filter(Boolean))];
+  if (isGuest) {
+    return [...new Set([...base, GUEST_USER_ID, GUEST_PARTNER_ID])];
+  }
+  return base;
+}
+
+function getGuestSession(dateKey, questions) {
+  if (!guestSessions.has(dateKey)) {
+    const sessionQuestions = questions?.length
+      ? questions
+      : getTodayWhoMoreLikelyQuestions();
+    guestSessions.set(dateKey, {
+      questions: sessionQuestions,
+      questionCount: sessionQuestions.length || WHO_MORE_LIKELY_BATCH_SIZE,
+      dateKey,
+      player1Id: GUEST_USER_ID,
+      player2Id: GUEST_PARTNER_ID,
+      player1Answers: {},
+      player2Answers: {},
+      player1Completed: false,
+      player2Completed: false,
+      bothCompleted: false,
+      bothAnswered: false,
+      matchCount: null,
+      agreed: false,
+    });
+  }
+  return guestSessions.get(dateKey);
+}
+
+function notifyGuestSubscribers(dateKey) {
+  const data = guestSessions.get(dateKey) || null;
+  const subs = guestSubscribers.get(dateKey);
+  if (!subs) return;
+  subs.forEach((callback) => {
+    try {
+      callback(data);
+    } catch (error) {
+      console.warn('guest whoMoreLikely subscriber error:', error.message);
+    }
+  });
+}
+
+function applyWhoMoreLikelyAnswer(existing, userId, memberList, { questions, questionIndex, choice }) {
+  const slot = getPlayerSlot(userId, memberList);
+  const pickedUserId = choiceToUserId(choice, userId, memberList);
+
+  if (!pickedUserId) {
+    if (choice === 'partner' && !getPartnerUserId(userId, memberList)) {
+      throw new Error("Your partner hasn't joined yet — share your invite code first.");
+    }
+    if (!userId) {
+      throw new Error('Sign in to save your answer.');
+    }
+    throw new Error('Invalid choice.');
+  }
+
+  const sortedMembers = [...memberList].sort();
+  const sessionQuestions = getSessionQuestions(existing, questions);
+  const questionCount = sessionQuestions.length || WHO_MORE_LIKELY_BATCH_SIZE;
+  const answersField = getAnswersField(slot);
+
+  const updatedAnswers = {
+    ...normalizeAnswersMap(existing[answersField]),
+    [String(questionIndex)]: pickedUserId,
+  };
+
+  const player1Answers =
+    slot === 'player1'
+      ? updatedAnswers
+      : normalizeAnswersMap(existing.player1Answers);
+  const player2Answers =
+    slot === 'player2'
+      ? updatedAnswers
+      : normalizeAnswersMap(existing.player2Answers);
+
+  const player1Completed = countAnswers(player1Answers) >= questionCount;
+  const player2Completed = countAnswers(player2Answers) >= questionCount;
+  const bothCompleted = player1Completed && player2Completed;
+
+  let matchCount = existing.matchCount ?? null;
+  let agreed = existing.agreed ?? false;
+  if (bothCompleted) {
+    matchCount = computeMatchCount(player1Answers, player2Answers, questionCount);
+    agreed = matchCount === questionCount;
+  }
+
+  return {
+    questions: sessionQuestions,
+    questionCount,
+    dateKey: existing.dateKey,
+    player1Id: sortedMembers[0] || existing.player1Id || null,
+    player2Id: sortedMembers[1] || existing.player2Id || null,
+    player1Answers,
+    player2Answers,
+    player1Completed,
+    player2Completed,
+    bothCompleted,
+    bothAnswered: bothCompleted,
+    matchCount,
+    agreed,
+    slot,
+    questionIndex,
+    sessionQuestions,
+  };
+}
 
 export function getWhoMoreLikelyDocRef(coupleId, dateKey = getDateKey()) {
   return doc(db, 'couples', coupleId, 'whoMoreLikely', dateKey);
@@ -188,8 +301,15 @@ export function subscribeToWhoMoreLikely(coupleId, dateKey, callback, onError) {
   }
 
   if (isGuestCoupleId(coupleId)) {
-    callback(null);
-    return () => {};
+    if (!guestSubscribers.has(dateKey)) {
+      guestSubscribers.set(dateKey, new Set());
+    }
+    guestSubscribers.get(dateKey).add(callback);
+    callback(getGuestSession(dateKey));
+
+    return () => {
+      guestSubscribers.get(dateKey)?.delete(callback);
+    };
   }
 
   return onSnapshot(
@@ -216,70 +336,84 @@ export async function submitWhoMoreLikelyAnswer(
   members,
   { questions, questionIndex, choice }
 ) {
+  const dateKey = getDateKey();
+  const memberList = buildWhoMoreLikelyMemberList(members, userId, {
+    isGuest: isGuestCoupleId(coupleId),
+  });
+
   if (isGuestCoupleId(coupleId)) {
-    showGuestSignupPrompt();
-    return;
+    try {
+      const existing = getGuestSession(dateKey, questions);
+      const result = applyWhoMoreLikelyAnswer(existing, userId, memberList, {
+        questions,
+        questionIndex,
+        choice,
+      });
+      const nextDoc = {
+        ...existing,
+        questions: result.sessionQuestions,
+        questionCount: result.questionCount,
+        dateKey,
+        player1Id: result.player1Id,
+        player2Id: result.player2Id,
+        player1Answers: result.player1Answers,
+        player2Answers: result.player2Answers,
+        player1Completed: result.player1Completed,
+        player2Completed: result.player2Completed,
+        bothCompleted: result.bothCompleted,
+        bothAnswered: result.bothAnswered,
+        matchCount: result.matchCount,
+        agreed: result.agreed,
+      };
+      guestSessions.set(dateKey, nextDoc);
+      notifyGuestSubscribers(dateKey);
+      return {
+        dateKey,
+        slot: result.slot,
+        questionIndex: result.questionIndex,
+        questionCount: result.questionCount,
+        player1Answers: result.player1Answers,
+        player2Answers: result.player2Answers,
+        player1Completed: result.player1Completed,
+        player2Completed: result.player2Completed,
+        bothCompleted: result.bothCompleted,
+        bothAnswered: result.bothAnswered,
+        matchCount: result.matchCount,
+        agreed: result.agreed,
+        questions: result.sessionQuestions,
+      };
+    } catch (error) {
+      console.warn('submitWhoMoreLikelyAnswer guest failed:', error.message);
+      throw error;
+    }
   }
 
   try {
-    const dateKey = getDateKey();
     const ref = getWhoMoreLikelyDocRef(coupleId, dateKey);
-    const memberList = [...new Set([...(members || []), userId].filter(Boolean))];
-    const slot = getPlayerSlot(userId, memberList);
-    const pickedUserId = choiceToUserId(choice, userId, memberList);
-
-    if (!pickedUserId) {
-      throw new Error('Invalid choice.');
-    }
-
     const snap = await getDoc(ref);
-    const existing = snap.exists() ? snap.data() : {};
-    const sortedMembers = [...memberList].sort();
-    const sessionQuestions = getSessionQuestions(existing, questions);
-    const questionCount = sessionQuestions.length || WHO_MORE_LIKELY_BATCH_SIZE;
-    const answersField = getAnswersField(slot);
-
-    const updatedAnswers = {
-      ...normalizeAnswersMap(existing[answersField]),
-      [String(questionIndex)]: pickedUserId,
-    };
-
-    const player1Answers =
-      slot === 'player1'
-        ? updatedAnswers
-        : normalizeAnswersMap(existing.player1Answers);
-    const player2Answers =
-      slot === 'player2'
-        ? updatedAnswers
-        : normalizeAnswersMap(existing.player2Answers);
-
-    const player1Completed = countAnswers(player1Answers) >= questionCount;
-    const player2Completed = countAnswers(player2Answers) >= questionCount;
-    const bothCompleted = player1Completed && player2Completed;
-
-    let matchCount = existing.matchCount ?? null;
-    let agreed = existing.agreed ?? false;
-    if (bothCompleted) {
-      matchCount = computeMatchCount(player1Answers, player2Answers, questionCount);
-      agreed = matchCount === questionCount;
-    }
+    const existing = snap.exists() ? { ...snap.data(), dateKey } : { dateKey };
+    const result = applyWhoMoreLikelyAnswer(existing, userId, memberList, {
+      questions,
+      questionIndex,
+      choice,
+    });
 
     await setDoc(
       ref,
       {
-        questions: sessionQuestions,
-        questionCount,
+        questions: result.sessionQuestions,
+        questionCount: result.questionCount,
         dateKey,
-        player1Id: sortedMembers[0] || existing.player1Id || null,
-        player2Id: sortedMembers[1] || existing.player2Id || null,
-        player1Answers,
-        player2Answers,
-        player1Completed,
-        player2Completed,
-        bothCompleted,
-        bothAnswered: bothCompleted,
-        matchCount,
-        agreed,
+        player1Id: result.player1Id,
+        player2Id: result.player2Id,
+        player1Answers: result.player1Answers,
+        player2Answers: result.player2Answers,
+        player1Completed: result.player1Completed,
+        player2Completed: result.player2Completed,
+        bothCompleted: result.bothCompleted,
+        bothAnswered: result.bothAnswered,
+        matchCount: result.matchCount,
+        agreed: result.agreed,
         updatedAt: serverTimestamp(),
       },
       { merge: true }
@@ -287,18 +421,18 @@ export async function submitWhoMoreLikelyAnswer(
 
     return {
       dateKey,
-      slot,
-      questionIndex,
-      questionCount,
-      player1Answers,
-      player2Answers,
-      player1Completed,
-      player2Completed,
-      bothCompleted,
-      bothAnswered: bothCompleted,
-      matchCount,
-      agreed,
-      questions: sessionQuestions,
+      slot: result.slot,
+      questionIndex: result.questionIndex,
+      questionCount: result.questionCount,
+      player1Answers: result.player1Answers,
+      player2Answers: result.player2Answers,
+      player1Completed: result.player1Completed,
+      player2Completed: result.player2Completed,
+      bothCompleted: result.bothCompleted,
+      bothAnswered: result.bothAnswered,
+      matchCount: result.matchCount,
+      agreed: result.agreed,
+      questions: result.sessionQuestions,
     };
   } catch (error) {
     console.warn('submitWhoMoreLikelyAnswer failed:', error.message);
