@@ -4,11 +4,13 @@ import { GUEST_PARTNER_ID, GUEST_SESSIONS } from '../constants/guestData';
 import { useCouple } from './useCouple';
 import { subscribeToCoupleGames, getPartnerUserId } from '../utils/firebase';
 import { subscribeToHes10History } from '../utils/hes10But';
+import { subscribeToDareDropHistory } from '../utils/dareDrop';
 import {
   buildHubGameCards,
   getCoupleTotalPoints,
   getDailyQuestionStatus,
   getTodayQuestion,
+  getTodaysActivityCount,
 } from '../utils/gamesHub';
 import { getStreakCount } from '../utils/points';
 
@@ -19,6 +21,7 @@ export function useGamesHub() {
   const { couple, loading: coupleLoading, error: coupleError } = useCouple();
   const [sessions, setSessions] = useState([]);
   const [hes10Rounds, setHes10Rounds] = useState([]);
+  const [dareDropHistory, setDareDropHistory] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(true);
   const [gamesError, setGamesError] = useState(null);
   const [partnerId, setPartnerId] = useState(null);
@@ -122,10 +125,38 @@ export function useGamesHub() {
     };
   }, [profile?.coupleId, isGuest]);
 
+  useEffect(() => {
+    if (isGuest || !profile?.coupleId) {
+      setDareDropHistory([]);
+      return undefined;
+    }
+
+    let isActive = true;
+
+    const unsubscribe = subscribeToDareDropHistory(
+      profile.coupleId,
+      (items) => {
+        if (isActive) setDareDropHistory(Array.isArray(items) ? items : []);
+      },
+      (error) => {
+        console.warn('useGamesHub dareDrop listener failed:', error?.message);
+        if (isActive) setDareDropHistory([]);
+      }
+    );
+
+    return () => {
+      isActive = false;
+      unsubscribe();
+    };
+  }, [profile?.coupleId, isGuest]);
+
   const hubData = useMemo(() => {
     try {
       const streak = getStreakCount(couple);
-      const activitiesToday = couple?.activitiesToday ?? 0;
+      const activitiesToday = getTodaysActivityCount(couple, {
+        sessions,
+        dareDropHistory,
+      });
       const totalPoints = getCoupleTotalPoints(couple);
       const todayQuestion = getTodayQuestion();
       const dailyStatus = getDailyQuestionStatus(
@@ -136,6 +167,7 @@ export function useGamesHub() {
       );
       const games = buildHubGameCards(sessions, profile?.uid, partnerId, {
         hes10Rounds,
+        dareDropHistory,
         partnerName: profile?.partnerName,
       });
 
@@ -158,11 +190,12 @@ export function useGamesHub() {
         dailyStatus: EMPTY_DAILY_STATUS,
         games: buildHubGameCards([], profile?.uid, partnerId, {
           hes10Rounds: [],
+          dareDropHistory: [],
           partnerName: profile?.partnerName,
         }),
       };
     }
-  }, [couple, sessions, hes10Rounds, profile?.uid, profile?.partnerName, partnerId]);
+  }, [couple, sessions, hes10Rounds, dareDropHistory, profile?.uid, profile?.partnerName, partnerId]);
 
   const hasCouple = Boolean(profile?.coupleId);
   const loading = isGuest
@@ -173,6 +206,7 @@ export function useGamesHub() {
     ...hubData,
     couple,
     sessions,
+    dareDropHistory,
     loading,
     error: coupleError || gamesError,
     partnerId,

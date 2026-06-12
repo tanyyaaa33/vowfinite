@@ -9,6 +9,7 @@ import {
   serverTimestamp,
 } from './firebase';
 import { DARE_CATEGORY_COLORS } from '../constants/gameData';
+import { getDateKey } from './points';
 import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
 
 export function getDareDropRef(coupleId, dareDropId) {
@@ -109,6 +110,13 @@ export function subscribeToDareDrop(coupleId, dareDropId, callback, onError) {
   );
 }
 
+export function isDareFromToday(item, todayKey = getDateKey()) {
+  if (!item) return false;
+  const ts = getRoundTimestamp(item);
+  if (!ts) return false;
+  return getDateKey(new Date(ts)) === todayKey;
+}
+
 export function findAcceptedDare(items, userId) {
   if (!userId || !Array.isArray(items)) return null;
   return (
@@ -118,11 +126,60 @@ export function findAcceptedDare(items, userId) {
   );
 }
 
+export function findUserDareToday(items, userId, todayKey = getDateKey()) {
+  if (!userId || !Array.isArray(items)) return null;
+  return (
+    items.find(
+      (item) =>
+        item?.userId === userId &&
+        isDareFromToday(item, todayKey) &&
+        ['offered', 'accepted', 'completed'].includes(item?.status)
+    ) || null
+  );
+}
+
+export function findOpenDareForUser(items, userId) {
+  if (!userId || !Array.isArray(items)) return null;
+  return (
+    items.find(
+      (item) =>
+        item?.userId === userId &&
+        (item?.status === 'offered' || item?.status === 'accepted')
+    ) || null
+  );
+}
+
+export function findPartnerDareNeedingReaction(items, userId) {
+  if (!userId || !Array.isArray(items)) return null;
+  return (
+    items.find(
+      (item) =>
+        item?.status === 'completed' &&
+        item?.userId &&
+        item.userId !== userId &&
+        !item?.partnerReaction
+    ) || null
+  );
+}
+
 export function findCompletedDares(items, userId) {
   if (!userId || !Array.isArray(items)) return [];
   return items.filter(
     (item) => item?.userId === userId && item?.status === 'completed'
   );
+}
+
+export function getDareNavigationParams(item) {
+  if (!item) return null;
+  return {
+    dareDropId: item.dareDropId || item.id,
+    dare: {
+      text: item.text,
+      category: item.category,
+      timeEstimate: item.timeEstimate,
+      categoryColor: item.categoryColor || getCategoryColor(item.category),
+    },
+  };
 }
 
 export async function createDareDropOffer(coupleId, userId, dareMeta) {
@@ -222,6 +279,11 @@ export async function completeDareDrop(coupleId, dareDropId, userId) {
     const snap = await getDoc(ref);
     if (!snap.exists()) {
       throw new Error('This dare is no longer available.');
+    }
+
+    const data = snap.data();
+    if (data.status === 'completed') {
+      return;
     }
 
     try {

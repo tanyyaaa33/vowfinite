@@ -3,13 +3,11 @@ import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, GRADIENTS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
-import { ACTIVITIES_REQUIRED, getDisplayActivitiesToday } from '../../utils/points';
+import { ACTIVITIES_REQUIRED } from '../../utils/points';
 
-export default function StreakSectionCard({ streak = 0, activitiesToday = 0, couple = null }) {
+export default function StreakSectionCard({ streak = 0, activitiesToday = 0 }) {
   const safeStreak = streak ?? 0;
-  const safeActivities = couple
-    ? getDisplayActivitiesToday(couple)
-    : Math.min(Math.max(activitiesToday ?? 0, 0), ACTIVITIES_REQUIRED);
+  const safeActivities = Math.min(Math.max(activitiesToday ?? 0, 0), ACTIVITIES_REQUIRED);
   const progress = Math.min(safeActivities / ACTIVITIES_REQUIRED, 1);
 
   return (

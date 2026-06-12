@@ -91,6 +91,12 @@ export default function DareDropComplete({ route, navigation }) {
   }, []);
 
   useEffect(() => {
+    if (record?.status === 'completed') {
+      pointsAwarded.current = true;
+    }
+  }, [record?.status]);
+
+  useEffect(() => {
     if (!profile?.coupleId || !dareDropId) {
       setRecordReady(true);
       return undefined;
@@ -104,6 +110,9 @@ export default function DareDropComplete({ route, navigation }) {
       (doc) => {
         if (!active || !isMounted.current) return;
         try {
+          if (doc?.status === 'completed') {
+            pointsAwarded.current = true;
+          }
           setRecord(doc);
           setRecordReady(true);
         } catch (error) {
@@ -191,14 +200,16 @@ export default function DareDropComplete({ route, navigation }) {
       await completeDareDrop(profile.coupleId, dareDropId, profile.uid);
 
       if (!pointsAwarded.current) {
-        pointsAwarded.current = true;
         try {
-          await completeGame(
+          const result = await completeGame(
             POINTS.DARE_DROP,
             'dare-drop',
             '✨',
             `dare-drop_${dareDropId}`
           );
+          if (result !== null) {
+            pointsAwarded.current = true;
+          }
         } catch (pointsError) {
           console.warn('Dare points failed:', pointsError.message);
           if (isMounted.current) {

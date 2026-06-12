@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { GUEST_COUPLE } from '../constants/guestData';
 import { subscribeToCouple } from '../utils/firebase';
+import {
+  syncCoupleUnlocks,
+  syncStreakHistory,
+  reconcileActivitiesToday,
+} from '../utils/points';
 
 const CoupleContext = createContext({
   couple: null,
@@ -39,6 +44,13 @@ export function CoupleProvider({ coupleId, isGuest = false, children }) {
         if (!isActive) return;
         setCouple(data);
         setLoading(false);
+        Promise.all([
+          syncCoupleUnlocks(coupleId, data),
+          reconcileActivitiesToday(coupleId, data),
+          syncStreakHistory(coupleId, data),
+        ]).catch((syncError) => {
+          console.warn('Couple sync failed:', syncError?.message);
+        });
       },
       (err) => {
         if (!isActive) return;

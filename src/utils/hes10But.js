@@ -10,6 +10,7 @@ import {
 } from './firebase';
 import { getPlayerSlot } from './dailyQuestion';
 import { isGuestCoupleId, showGuestSignupPrompt } from './guestMode';
+import { getDateKey } from './points';
 
 export const MIN_SENTENCE_LENGTH = 10;
 export const CREATOR_DISPLAY_RATING = 10;
@@ -72,6 +73,12 @@ export function getRoundTimestamp(round) {
 
 export function sortRoundsByDate(rounds = []) {
   return [...rounds].sort((a, b) => getRoundTimestamp(b) - getRoundTimestamp(a));
+}
+
+export function isRoundFromToday(round, todayKey = getDateKey()) {
+  const ts = getRoundTimestamp(round);
+  if (!ts) return false;
+  return getDateKey(new Date(ts)) === todayKey;
 }
 
 export function subscribeToHes10Round(coupleId, roundId, callback, onError) {
@@ -164,7 +171,7 @@ export function findAwaitingRoundForCreator(rounds, userId) {
   );
 }
 
-export function findRatedRoundForCreator(rounds, userId) {
+export function findRatedRoundForCreator(rounds, userId, todayKey = null) {
   if (!userId || !Array.isArray(rounds)) return null;
   const sorted = sortRoundsByDate(rounds);
   return (
@@ -172,12 +179,13 @@ export function findRatedRoundForCreator(rounds, userId) {
       (round) =>
         round?.creatorId === userId &&
         round?.partnerRating != null &&
-        round?.status === 'rated'
+        round?.status === 'rated' &&
+        (todayKey == null || isRoundFromToday(round, todayKey))
     ) || null
   );
 }
 
-export function findRatedRoundForRater(rounds, userId) {
+export function findRatedRoundForRater(rounds, userId, todayKey = null) {
   if (!userId || !Array.isArray(rounds)) return null;
   const sorted = sortRoundsByDate(rounds);
   return (
@@ -185,7 +193,8 @@ export function findRatedRoundForRater(rounds, userId) {
       (round) =>
         round?.raterId === userId &&
         round?.partnerRating != null &&
-        round?.status === 'rated'
+        round?.status === 'rated' &&
+        (todayKey == null || isRoundFromToday(round, todayKey))
     ) || null
   );
 }
@@ -199,7 +208,9 @@ export function getHes10NavigationTarget(rounds, userId) {
     };
   }
 
-  const creatorReveal = findRatedRoundForCreator(rounds, userId);
+  const todayKey = getDateKey();
+
+  const creatorReveal = findRatedRoundForCreator(rounds, userId, todayKey);
   if (creatorReveal?.id) {
     return {
       screen: 'Hesa10ButReveal',
@@ -211,7 +222,7 @@ export function getHes10NavigationTarget(rounds, userId) {
     };
   }
 
-  const raterReveal = findRatedRoundForRater(rounds, userId);
+  const raterReveal = findRatedRoundForRater(rounds, userId, todayKey);
   if (raterReveal?.id) {
     return {
       screen: 'Hesa10ButReveal',
@@ -240,7 +251,10 @@ export function getHes10ButStatus(rounds, userId, partnerName) {
     };
   }
 
-  const revealReady = findRatedRoundForCreator(rounds, userId);
+  const todayKey = getDateKey();
+  const revealReady =
+    findRatedRoundForCreator(rounds, userId, todayKey) ||
+    findRatedRoundForRater(rounds, userId, todayKey);
   if (revealReady) {
     return { status: 'reveal', label: 'See their rating' };
   }

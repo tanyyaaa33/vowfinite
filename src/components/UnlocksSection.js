@@ -3,10 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, GRADIENTS } from '../constants/colors';
 import { FONTS } from '../constants/fonts';
-import { UNLOCKS, hasUnlock } from '../utils/points';
+import { UNLOCKS, hasUnlock, getCouplePoints } from '../utils/points';
+
+const COMING_SOON_MESSAGE =
+  "This reward is coming soon in a future update. You've earned it — we'll notify you when it launches!";
 
 export default function UnlocksSection({ couple }) {
-  const points = couple?.points ?? 0;
+  const points = getCouplePoints(couple);
 
   if (!couple) {
     return (
@@ -26,19 +29,16 @@ export default function UnlocksSection({ couple }) {
         const isLast = index === UNLOCKS.length - 1;
 
         const handlePress = () => {
-          if (unlocked) {
-            Alert.alert(
-              unlock.title,
-              'This reward is coming soon in a future update. You\'ve earned it — we\'ll notify you when it launches!'
-            );
-          }
+          if (!unlocked) return;
+          Alert.alert(unlock.title, COMING_SOON_MESSAGE);
         };
 
         return (
           <TouchableOpacity
             key={unlock.id}
-            activeOpacity={unlocked ? 0.8 : 1}
-            onPress={unlocked ? handlePress : undefined}
+            activeOpacity={unlocked ? 0.75 : 1}
+            onPress={handlePress}
+            disabled={!unlocked}
             style={[styles.row, unlocked && styles.rowUnlocked, isLast && styles.rowLast]}
           >
             <Text style={styles.emoji}>{unlock.emoji}</Text>
@@ -49,7 +49,7 @@ export default function UnlocksSection({ couple }) {
               <Text style={styles.rowDesc} numberOfLines={2}>
                 {unlock.description}
               </Text>
-              {!unlocked && (
+              {!unlocked ? (
                 <View style={styles.barTrack}>
                   <LinearGradient
                     colors={GRADIENTS.primary}
@@ -58,6 +58,8 @@ export default function UnlocksSection({ couple }) {
                     style={[styles.barFill, { width: `${progress * 100}%` }]}
                   />
                 </View>
+              ) : (
+                <Text style={styles.tapHint}>Tap to view your reward</Text>
               )}
             </View>
             <Text style={[styles.pointsLabel, unlocked && styles.unlockedLabel]}>
@@ -105,6 +107,16 @@ const styles = StyleSheet.create({
   },
   rowUnlocked: {
     opacity: 1,
+    backgroundColor: COLORS.screenBg,
+    borderRadius: 12,
+    marginHorizontal: -4,
+    paddingHorizontal: 4,
+  },
+  tapHint: {
+    fontFamily: FONTS.medium,
+    fontSize: 10,
+    color: COLORS.pink,
+    marginTop: 4,
   },
   emoji: {
     fontSize: 22,

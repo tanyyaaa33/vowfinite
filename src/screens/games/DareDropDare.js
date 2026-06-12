@@ -45,7 +45,9 @@ import {
   declinePartnerDare,
   skipDareDrop,
   findAcceptedDare,
+  findUserDareToday,
   findPendingPartnerDare,
+  findPartnerDareNeedingReaction,
   sendDareToPartner,
   getCategoryColor,
 } from '../../utils/dareDrop';
@@ -105,6 +107,7 @@ export default function DareDropDare({ navigation, route }) {
   const [accepting, setAccepting] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [skipSheetVisible, setSkipSheetVisible] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
 
   const isMounted = useRef(true);
   const navigatedRef = useRef(false);
@@ -172,12 +175,51 @@ export default function DareDropDare({ navigation, route }) {
       (items) => {
         if (!active || !isMounted.current) return;
         try {
-          const pending = findPendingPartnerDare(items, profile.uid);
+          const list = Array.isArray(items) ? items : [];
+          setHistoryItems(list);
+
+          const pending = findPendingPartnerDare(list, profile.uid);
           if (pending) {
             setPartnerDare(pending);
             setDareDropId(pending.dareDropId || pending.id);
+            setHistoryReady(true);
+            return;
           }
-          const accepted = findAcceptedDare(items, profile.uid);
+
+          const partnerReactionDare = findPartnerDareNeedingReaction(list, profile.uid);
+          if (partnerReactionDare) {
+            try {
+              navigation.navigate('DareDropReaction', {
+                dareDropId: partnerReactionDare.dareDropId || partnerReactionDare.id,
+                dare: {
+                  text: partnerReactionDare.text,
+                  category: partnerReactionDare.category,
+                  categoryColor:
+                    partnerReactionDare.categoryColor ||
+                    getCategoryColor(partnerReactionDare.category),
+                },
+              });
+            } catch (navError) {
+              console.warn('Navigate to partner reaction failed:', navError.message);
+            }
+            setHistoryReady(true);
+            return;
+          }
+
+          const userDareToday = findUserDareToday(list, profile.uid);
+          if (userDareToday?.status === 'completed' || userDareToday?.status === 'accepted') {
+            goToComplete(userDareToday);
+            setHistoryReady(true);
+            return;
+          }
+
+          if (userDareToday?.status === 'offered') {
+            setDareDropId(userDareToday.dareDropId || userDareToday.id);
+            setHistoryReady(true);
+            return;
+          }
+
+          const accepted = findAcceptedDare(list, profile.uid);
           if (accepted) {
             goToComplete(accepted);
           }
@@ -224,6 +266,11 @@ export default function DareDropDare({ navigation, route }) {
       return undefined;
     }
 
+    if (findUserDareToday(historyItems, profile.uid)) {
+      setOfferReady(true);
+      return undefined;
+    }
+
     let active = true;
     offerCreatedRef.current = false;
     setOfferReady(false);
@@ -258,7 +305,7 @@ export default function DareDropDare({ navigation, route }) {
     return () => {
       active = false;
     };
-  }, [profile?.coupleId, profile?.uid, historyReady, dare, skipOffset, dareDropId]);
+  }, [profile?.coupleId, profile?.uid, historyReady, historyItems, dare, skipOffset, dareDropId, partnerDare]);
 
   const handleSendToPartner = async () => {
     if (sendingToPartner || !profile?.coupleId) return;

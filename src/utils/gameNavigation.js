@@ -1,5 +1,10 @@
 import { getDailyQuestionStatus, getWhoMoreLikelyStatus } from './gamesHub';
 import { getHes10NavigationTarget } from './hes10But';
+import {
+  findPartnerDareNeedingReaction,
+  findUserDareToday,
+  getDareNavigationParams,
+} from './dareDrop';
 
 export function navigateToGamesHub(navigation) {
   if (!navigation?.navigate) return;
@@ -19,6 +24,7 @@ export function getGameNavigationTarget(gameId, context = {}) {
   const {
     sessions = [],
     hes10Rounds = [],
+    dareDropHistory = [],
     userId,
     partnerId,
     partnerName,
@@ -45,12 +51,39 @@ export function getGameNavigationTarget(gameId, context = {}) {
     }
 
     case 'dare-drop': {
-      const partnerDare = sessions.find?.(
-        (s) => s.gameId === 'dare-drop' && s.stage === 'sent_to_partner'
-      );
-      if (partnerDare?.dareDropId) {
-        return { screen: 'DareDropDare', params: { dareDropId: partnerDare.dareDropId } };
+      const partnerReactionDare = findPartnerDareNeedingReaction(dareDropHistory, userId);
+      if (partnerReactionDare) {
+        return {
+          screen: 'DareDropReaction',
+          params: getDareNavigationParams(partnerReactionDare),
+        };
       }
+
+      const userDareToday = findUserDareToday(dareDropHistory, userId);
+      if (userDareToday?.status === 'completed' || userDareToday?.status === 'accepted') {
+        return {
+          screen: 'DareDropComplete',
+          params: getDareNavigationParams(userDareToday),
+        };
+      }
+
+      const partnerDare = dareDropHistory.find?.(
+        (item) => item.status === 'sent_to_partner' && item.targetUserId === userId
+      );
+      if (partnerDare) {
+        return {
+          screen: 'DareDropDare',
+          params: getDareNavigationParams(partnerDare),
+        };
+      }
+
+      if (userDareToday?.status === 'offered') {
+        return {
+          screen: 'DareDropDare',
+          params: getDareNavigationParams(userDareToday),
+        };
+      }
+
       return { screen: 'DareDropDare', params: {} };
     }
 

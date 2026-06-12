@@ -100,9 +100,116 @@ export function getStreakCount(couple) {
   return couple.currentStreak ?? couple.streak ?? 0;
 }
 
+export const STREAK_ACTIVITY_ACTIONS = [
+  'daily-question',
+  'who-more-likely',
+  'hes-a-10-but',
+  'dare-drop',
+  'voice-bomb',
+];
+
+function isTimestampIdFromToday(id, todayKey = getDateKey()) {
+  const ts = parseInt(String(id).split('_')[0], 10);
+  if (!Number.isFinite(ts) || ts <= 0) return false;
+  return getDateKey(new Date(ts)) === todayKey;
+}
+
+function isStreakClaimKeyFromToday(key, action, todayKey = getDateKey()) {
+  const suffix = key.slice(`${action}_`.length);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(suffix)) {
+    return suffix === todayKey;
+  }
+  return isTimestampIdFromToday(suffix, todayKey);
+}
+
+export function getStreakActivityActionsToday(couple, todayKey = getDateKey()) {
+  const claimed = couple?.pointsClaimed;
+  if (!claimed || typeof claimed !== 'object') {
+    return [];
+  }
+
+  const actions = new Set();
+
+  for (const [key, value] of Object.entries(claimed)) {
+    if (!value || key.startsWith('partner-sync_')) continue;
+
+    const action = STREAK_ACTIVITY_ACTIONS.find((name) => key.startsWith(`${name}_`));
+    if (!action || !isStreakClaimKeyFromToday(key, action, todayKey)) continue;
+
+    actions.add(action);
+  }
+
+  return [...actions];
+}
+
 export function getDisplayActivitiesToday(couple) {
-  const raw = couple?.activitiesToday ?? 0;
-  return Math.min(Math.max(raw, 0), ACTIVITIES_REQUIRED);
+  return Math.min(getEffectiveActivitiesToday(couple), ACTIVITIES_REQUIRED);
+}
+
+export async function reconcileActivitiesToday(coupleId, coupleData = null) {
+  try {
+    if (!coupleId) return 0;
+
+    const today = getDateKey();
+    const { ref, data } = coupleData
+      ? { ref: doc(db, 'couples', coupleId), data: coupleData }
+      : await fetchCouple(coupleId);
+
+    const claimedCount = getStreakActivityActionsToday(data, today).length;
+    const cappedCount = Math.min(claimedCount, ACTIVITIES_REQUIRED);
+    const counterToday =
+      data?.lastActivityDate === today ? (data?.activitiesToday ?? 0) : 0;
+    const effectiveCount = Math.min(Math.max(claimedCount, counterToday), ACTIVITIES_REQUIRED);
+    const updates = {};
+
+    if (claimedCount > 0) {
+      if (data.lastActivityDate !== today) {
+        updates.lastActivityDate = today;
+      }
+      if ((data.activitiesToday ?? 0) !== cappedCount) {
+        updates.activitiesToday = cappedCount;
+      }
+    } else if (data.lastActivityDate !== today && (data.activitiesToday ?? 0) !== 0) {
+      updates.activitiesToday = 0;
+    } else if (data.lastActivityDate === today && (data.activitiesToday ?? 0) !== cappedCount) {
+      updates.activitiesToday = cappedCount;
+    }
+
+    const merged = { ...data, ...updates };
+    const streakUpdates = buildStreakGoalUpdates(merged, today);
+    if (streakUpdates) {
+      Object.assign(updates, streakUpdates);
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await updateDoc(ref, updates);
+    }
+
+    return effectiveCount;
+  } catch (error) {
+    console.warn('reconcileActivitiesToday failed:', error.message);
+    return 0;
+  }
+}
+
+export function shiftDateKey(dateKey, offsetDays) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  return getDateKey(date);
+}
+
+export function getActiveStreakDateKeys(couple) {
+  const streak = getStreakCount(couple);
+  if (!streak) return [];
+
+  const lastSecured = couple?.streakSecuredDate || couple?.lastActivityDate || null;
+  if (!lastSecured) return [];
+
+  const dates = [];
+  for (let i = 0; i < streak; i += 1) {
+    dates.push(shiftDateKey(lastSecured, -i));
+  }
+  return dates;
 }
 
 export function getStreakHistoryDates(couple) {
@@ -115,15 +222,69 @@ export function getStreakHistoryDates(couple) {
     });
   }
 
-  if (couple?.streakSecuredDate) {
-    dates.add(couple.streakSecuredDate);
-  }
+  getActiveStreakDateKeys(couple).forEach((dateKey) => dates.add(dateKey));
 
   return dates;
 }
 
+export async function syncStreakHistory(coupleId, coupleData = null) {
+  try {
+    if (!coupleId) return [];
+
+    const { ref, data } = coupleData
+      ? { ref: doc(db, 'couples', coupleId), data: coupleData }
+      : await fetchCouple(coupleId);
+
+    const activeDates = getActiveStreakDateKeys(data);
+    const existing = data.streakDays || {};
+    const updates = {};
+
+    activeDates.forEach((dateKey) => {
+      if (!existing[dateKey]) {
+        updates[`streakDays.${dateKey}`] = true;
+      }
+    });
+
+    if (Object.keys(updates).length > 0) {
+      await updateDoc(ref, updates);
+    }
+
+    return getStreakHistoryDates({ ...data, streakDays: { ...existing, ...Object.fromEntries(activeDates.map((d) => [d, true])) } });
+  } catch (error) {
+    console.warn('syncStreakHistory failed:', error.message);
+    return getStreakHistoryDates(coupleData || {});
+  }
+}
+
+function getEffectiveActivitiesToday(data, today = getDateKey()) {
+  const fromClaims = getStreakActivityActionsToday(data, today).length;
+  const fromCounter =
+    data?.lastActivityDate === today ? (data?.activitiesToday ?? 0) : 0;
+  return Math.min(Math.max(fromClaims, fromCounter), ACTIVITIES_REQUIRED);
+}
+
+export async function trySecureStreakGoal(coupleId, coupleData = null) {
+  try {
+    if (!coupleId) return null;
+
+    const today = getDateKey();
+    const { ref, data } = coupleData
+      ? { ref: doc(db, 'couples', coupleId), data: coupleData }
+      : await fetchCouple(coupleId);
+
+    const streakUpdates = buildStreakGoalUpdates(data, today);
+    if (!streakUpdates) return null;
+
+    await updateDoc(ref, streakUpdates);
+    return streakUpdates;
+  } catch (error) {
+    console.warn('trySecureStreakGoal failed:', error.message);
+    return null;
+  }
+}
+
 function buildStreakGoalUpdates(data, today = getDateKey()) {
-  if ((data?.activitiesToday ?? 0) < ACTIVITIES_REQUIRED) {
+  if (getEffectiveActivitiesToday(data, today) < ACTIVITIES_REQUIRED) {
     return null;
   }
   if (data?.streakSecuredDate === today) {
@@ -150,8 +311,11 @@ function buildStreakGoalUpdates(data, today = getDateKey()) {
     streak: currentStreak,
     longestStreak,
     streakSecuredDate: today,
-    [`streakDays.${today}`]: true,
   };
+
+  for (let i = 0; i < currentStreak; i += 1) {
+    updates[`streakDays.${shiftDateKey(today, -i)}`] = true;
+  }
 
   if (MILESTONE_DAYS.includes(currentStreak)) {
     updates.pendingMilestone = currentStreak;
@@ -164,17 +328,58 @@ export function getFreezeTokens(couple) {
   return couple?.freezeTokens ?? 0;
 }
 
+export function getCouplePoints(couple) {
+  if (!couple) return 0;
+  return couple.points ?? couple.totalPoints ?? 0;
+}
+
 export function hasUnlock(couple, unlockId) {
-  return (couple?.unlocks || []).includes(unlockId);
+  if (!couple) return false;
+  if ((couple.unlocks || []).includes(unlockId)) return true;
+
+  const unlock = UNLOCKS.find((u) => u.id === unlockId);
+  if (!unlock) return false;
+
+  return getCouplePoints(couple) >= unlock.points;
+}
+
+export function getEarnedUnlockIds(couple) {
+  if (!couple) return [];
+  const points = getCouplePoints(couple);
+  const fromPoints = UNLOCKS.filter((u) => points >= u.points).map((u) => u.id);
+  return [...new Set([...(couple.unlocks || []), ...fromPoints])];
 }
 
 export function getUnlockedFeatures(couple) {
-  const earned = couple?.unlocks || [];
+  const earned = getEarnedUnlockIds(couple);
   return UNLOCKS.filter((u) => earned.includes(u.id));
 }
 
+export async function syncCoupleUnlocks(coupleId, coupleData = null) {
+  try {
+    if (!coupleId) return [];
+
+    const { ref, data } = coupleData
+      ? { ref: doc(db, 'couples', coupleId), data: coupleData }
+      : await fetchCouple(coupleId);
+    const points = getCouplePoints(data);
+    const existing = data.unlocks || [];
+    const earned = UNLOCKS.filter((u) => points >= u.points).map((u) => u.id);
+    const merged = [...new Set([...existing, ...earned])];
+
+    if (merged.length !== existing.length) {
+      await updateDoc(ref, { unlocks: merged });
+    }
+
+    return merged;
+  } catch (error) {
+    console.warn('syncCoupleUnlocks failed:', error.message);
+    return [];
+  }
+}
+
 export function getNextUnlock(couple) {
-  const points = couple?.points ?? 0;
+  const points = getCouplePoints(couple);
   return UNLOCKS.find((u) => points < u.points) || null;
 }
 
@@ -348,24 +553,26 @@ export async function checkStreak(coupleId) {
     const lastCheck = data.lastStreakCheckDate || data.lastActivityDate || today;
 
     if (lastCheck === today) {
-      const streakUpdates = buildStreakGoalUpdates(data, today);
+      await reconcileActivitiesToday(coupleId, data);
+      const fresh = await fetchCouple(coupleId);
+      const streakUpdates = buildStreakGoalUpdates(fresh.data, today);
       if (streakUpdates) {
-        await updateDoc(ref, streakUpdates);
+        await updateDoc(fresh.ref, streakUpdates);
         return {
           currentStreak: streakUpdates.currentStreak,
-          activitiesToday: data.activitiesToday ?? 0,
+          activitiesToday: getEffectiveActivitiesToday(fresh.data, today),
           streakReset: false,
-          pendingMilestone: streakUpdates.pendingMilestone ?? data.pendingMilestone ?? null,
-          freezeTokens: data.freezeTokens ?? 0,
+          pendingMilestone: streakUpdates.pendingMilestone ?? fresh.data.pendingMilestone ?? null,
+          freezeTokens: fresh.data.freezeTokens ?? 0,
         };
       }
 
       return {
-        currentStreak: getStreakCount(data),
-        activitiesToday: data.activitiesToday ?? 0,
+        currentStreak: getStreakCount(fresh.data),
+        activitiesToday: getEffectiveActivitiesToday(fresh.data, today),
         streakReset: false,
-        pendingMilestone: data.pendingMilestone ?? null,
-        freezeTokens: data.freezeTokens ?? 0,
+        pendingMilestone: fresh.data.pendingMilestone ?? null,
+        freezeTokens: fresh.data.freezeTokens ?? 0,
       };
     }
 
@@ -519,11 +726,13 @@ export async function completeGameActivity(
     const { ref, data } = await fetchCouple(coupleId);
 
     if (isPointsClaimed(data, claimKey)) {
+      const streakUpdates = await trySecureStreakGoal(coupleId, data);
       return {
         newPoints: data.points ?? 0,
         newUnlocks: [],
         alreadyAwarded: true,
-        activitiesToday: data.activitiesToday ?? 0,
+        activitiesToday: getEffectiveActivitiesToday(data),
+        currentStreak: streakUpdates?.currentStreak ?? getStreakCount(data),
       };
     }
 
@@ -549,11 +758,21 @@ export async function completeGameActivity(
 
     await updateDoc(ref, claimUpdates);
 
+    const streakUpdates = await trySecureStreakGoal(coupleId);
+    const effectiveActivities = streakUpdates
+      ? getEffectiveActivitiesToday({
+          ...data,
+          ...claimUpdates,
+          pointsClaimed: { ...(data.pointsClaimed || {}), [claimKey]: true },
+        })
+      : activityResult.activitiesToday;
+
     return {
       ...pointsResult,
       syncBonus,
       alreadyAwarded: false,
-      activitiesToday: activityResult.activitiesToday,
+      activitiesToday: effectiveActivities,
+      currentStreak: streakUpdates?.currentStreak ?? activityResult.streak,
     };
   } catch (error) {
     console.warn('completeGameActivity failed:', error.message);

@@ -3,11 +3,17 @@ import {
   getTodayDailyQuestion,
   WHO_MORE_LIKELY_BATCH_SIZE,
 } from '../constants/gameData';
-import { getDateKey } from './points';
+import { getDateKey, STREAK_ACTIVITY_ACTIONS, ACTIVITIES_REQUIRED } from './points';
 import {
   findPendingRoundForUser,
   getHes10ButStatus,
 } from './hes10But';
+import {
+  findPartnerDareNeedingReaction,
+  findUserDareToday,
+  isDareFromToday,
+  getRoundTimestamp,
+} from './dareDrop';
 
 export function getTodayQuestion() {
   return getTodayDailyQuestion().question;
@@ -18,19 +24,9 @@ export function getCoupleTotalPoints(couple) {
   return couple.totalPoints ?? couple.points ?? 0;
 }
 
-const ACTIVITY_ACTIONS = [
-  'daily-question',
-  'who-more-likely',
-  'hes-a-10-but',
-  'dare-drop',
-  'voice-bomb',
-  'voice-bomb-reply',
-];
-
 const ACTIVITY_DISPLAY = Object.fromEntries(
   (HUB_GAMES || []).map((game) => [game.id, { title: game.title, emoji: game.emoji }])
 );
-ACTIVITY_DISPLAY['voice-bomb-reply'] = { title: 'Voice Bomb Reply', emoji: '💬' };
 
 function isTimestampIdFromToday(id, todayKey = getDateKey()) {
   const ts = parseInt(String(id).split('_')[0], 10);
@@ -75,41 +71,67 @@ function getGuestTodaysActivities(sessions, todayKey = getDateKey()) {
   return activities;
 }
 
+function addActivityFromAction(activities, seenActions, action, sortTime = 0) {
+  if (seenActions.has(action)) return;
+  const meta = ACTIVITY_DISPLAY[action];
+  if (!meta) return;
+  seenActions.add(action);
+  activities.push({
+    id: action,
+    title: meta.title,
+    emoji: meta.emoji,
+    sortTime,
+  });
+}
+
 export function getTodaysCompletedActivities(
   couple,
-  { sessions = [], todayKey = getDateKey() } = {}
+  { sessions = [], dareDropHistory = [], todayKey = getDateKey() } = {}
 ) {
-  if (couple?.lastActivityDate && couple.lastActivityDate !== todayKey) {
-    return [];
-  }
+  const activities = [];
+  const seenActions = new Set();
 
   const claimed = couple?.pointsClaimed;
-  if (!claimed || typeof claimed !== 'object') {
-    return getGuestTodaysActivities(sessions, todayKey);
+  if (claimed && typeof claimed === 'object') {
+    for (const [key, value] of Object.entries(claimed)) {
+      if (!value || key.startsWith('partner-sync_')) continue;
+
+      const action = STREAK_ACTIVITY_ACTIONS.find((name) => key.startsWith(`${name}_`));
+      if (!action || !isClaimKeyFromToday(key, action, todayKey)) continue;
+
+      addActivityFromAction(activities, seenActions, action, getClaimSortTime(key, action));
+    }
   }
 
-  const activities = [];
+  for (const item of dareDropHistory) {
+    if (item?.status === 'completed' && isDareFromToday(item, todayKey)) {
+      addActivityFromAction(activities, seenActions, 'dare-drop', getRoundTimestamp(item));
+    }
+  }
 
-  for (const [key, value] of Object.entries(claimed)) {
-    if (!value || key.startsWith('partner-sync_')) continue;
+  for (const session of sessions) {
+    if (session?.gameId !== 'dare-drop' || !isSessionToday(session, todayKey)) continue;
+    if (session.stage !== 'completed' && session.stage !== 'complete') continue;
+    addActivityFromAction(activities, seenActions, 'dare-drop', 0);
+  }
 
-    const action = ACTIVITY_ACTIONS.find((name) => key.startsWith(`${name}_`));
-    if (!action || !isClaimKeyFromToday(key, action, todayKey)) continue;
-
-    const meta = ACTIVITY_DISPLAY[action];
-    if (!meta) continue;
-
-    activities.push({
-      id: key,
-      title: meta.title,
-      emoji: meta.emoji,
-      sortTime: getClaimSortTime(key, action),
-    });
+  if (activities.length === 0 && !claimed) {
+    return getGuestTodaysActivities(sessions, todayKey);
   }
 
   return activities
     .sort((a, b) => a.sortTime - b.sortTime)
     .map(({ id, title, emoji }) => ({ id, title, emoji }));
+}
+
+export function getTodaysActivityCount(
+  couple,
+  { sessions = [], dareDropHistory = [], todayKey = getDateKey() } = {}
+) {
+  return Math.min(
+    getTodaysCompletedActivities(couple, { sessions, dareDropHistory, todayKey }).length,
+    ACTIVITIES_REQUIRED
+  );
 }
 
 function sessionDateKey(session) {
@@ -253,7 +275,15 @@ export function isPartnerWaiting(sessions, gameId, userId, partnerId, hes10Round
   }
 }
 
-function getGameHubStatus(gameId, sessions, userId, partnerId, partnerName, hes10Rounds) {
+function getGameHubStatus(
+  gameId,
+  sessions,
+  userId,
+  partnerId,
+  partnerName,
+  hes10Rounds,
+  dareDropHistory = []
+) {
   switch (gameId) {
     case 'daily-question':
       return getDailyQuestionStatus(sessions, userId, partnerId, partnerName);
@@ -262,19 +292,26 @@ function getGameHubStatus(gameId, sessions, userId, partnerId, partnerName, hes1
     case 'hes-a-10-but':
       return getHes10ButStatus(hes10Rounds, userId, partnerName);
     case 'dare-drop': {
-      const todayKey = getDateKey();
-      const partnerCompleted = getTodaySessions(sessions, 'dare-drop', todayKey).some(
-        (s) => s.userId === partnerId && s.stage === 'complete'
-      );
-      if (partnerCompleted) {
+      const partnerReactionDare = findPartnerDareNeedingReaction(dareDropHistory, userId);
+      if (partnerReactionDare) {
         return { status: 'react', label: 'React to partner\'s dare' };
       }
-      const partnerSent = sessions.some(
-        (s) => s.gameId === 'dare-drop' && s.stage === 'sent_to_partner'
+
+      const userDareToday = findUserDareToday(dareDropHistory, userId);
+      if (userDareToday?.status === 'completed') {
+        return { status: 'done', label: 'Dare complete ✓' };
+      }
+      if (userDareToday?.status === 'accepted') {
+        return { status: 'finish', label: 'Mark your dare done' };
+      }
+
+      const partnerSent = dareDropHistory.find(
+        (item) => item.status === 'sent_to_partner' && item.targetUserId === userId
       );
       if (partnerSent) {
         return { status: 'partner', label: 'Dare from partner' };
       }
+
       return { status: 'play', label: 'Today\'s dare awaits' };
     }
     case 'voice-bomb': {
@@ -295,7 +332,7 @@ export function buildHubGameCards(
   sessions,
   userId,
   partnerId,
-  { hes10Rounds = [], partnerName = 'partner' } = {}
+  { hes10Rounds = [], dareDropHistory = [], partnerName = 'partner' } = {}
 ) {
   const list = Array.isArray(sessions) ? sessions : [];
   return (HUB_GAMES || []).map((game) => {
@@ -305,7 +342,8 @@ export function buildHubGameCards(
       userId,
       partnerId,
       partnerName,
-      hes10Rounds
+      hes10Rounds,
+      dareDropHistory
     );
 
     return {

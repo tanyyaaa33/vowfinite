@@ -11,7 +11,7 @@ import {
   useFreeze,
 } from '../utils/points';
 
-export default function FreezeStreakCard({ couple, coupleId }) {
+export default function FreezeStreakCard({ couple, coupleId, activitiesToday = 0 }) {
   const [loading, setLoading] = useState(false);
   const isMounted = useRef(true);
 
@@ -23,10 +23,10 @@ export default function FreezeStreakCard({ couple, coupleId }) {
   }, []);
 
   const streak = getStreakCount(couple);
-  const activitiesToday = couple?.activitiesToday ?? 0;
+  const safeActivitiesToday = Math.min(Math.max(activitiesToday ?? 0, 0), ACTIVITIES_REQUIRED);
   const freezeTokens = getFreezeTokens(couple);
   const isProtected = couple?.streakProtectedDate === getDateKey();
-  const needsActivities = activitiesToday < ACTIVITIES_REQUIRED;
+  const needsActivities = safeActivitiesToday < ACTIVITIES_REQUIRED;
   const showCard = streak > 0 && needsActivities && freezeTokens > 0;
 
   if (!showCard) return null;
@@ -58,7 +58,7 @@ export default function FreezeStreakCard({ couple, coupleId }) {
             {isProtected ? 'Streak protected tonight' : 'Protect your streak'}
           </Text>
           <Text style={styles.desc}>
-            {activitiesToday}/{ACTIVITIES_REQUIRED} activities done · {freezeTokens} freeze
+            {safeActivitiesToday}/{ACTIVITIES_REQUIRED} activities done · {freezeTokens} freeze
             {freezeTokens === 1 ? '' : 's'} left
           </Text>
         </View>

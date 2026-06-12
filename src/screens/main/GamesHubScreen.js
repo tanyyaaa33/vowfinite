@@ -26,12 +26,12 @@ export default function GamesHubScreen({ navigation }) {
     error,
     streak,
     activitiesToday,
-    couple,
     totalPoints,
     todayQuestion,
     dailyStatus,
     games,
     hes10Rounds,
+    dareDropHistory,
     partnerId,
     sessions,
   } = useGamesHub();
@@ -44,6 +44,7 @@ export default function GamesHubScreen({ navigation }) {
         const target = getGameNavigationTarget(game.id, {
           sessions,
           hes10Rounds,
+          dareDropHistory,
           userId: profile?.uid,
           partnerId,
           partnerName: profile?.partnerName,
@@ -61,7 +62,7 @@ export default function GamesHubScreen({ navigation }) {
         console.warn('GamesHub navigation failed:', navError.message);
       }
     },
-    [navigation, sessions, hes10Rounds, profile?.uid, profile?.partnerName, partnerId]
+    [navigation, sessions, hes10Rounds, dareDropHistory, profile?.uid, profile?.partnerName, partnerId]
   );
 
   const openDailyQuestion = useCallback(() => {
@@ -97,7 +98,6 @@ export default function GamesHubScreen({ navigation }) {
             <StreakSectionCard
               streak={streak ?? 0}
               activitiesToday={activitiesToday ?? 0}
-              couple={couple}
             />
 
             <DailyQuestionFeaturedCard

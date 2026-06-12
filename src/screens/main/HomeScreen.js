@@ -24,11 +24,10 @@ import {
   formatPoints,
   getStreakCount,
   getNextUnlock,
-  getDisplayActivitiesToday,
   getStreakHistoryDates,
   ACTIVITIES_REQUIRED,
 } from '../../utils/points';
-import { getTodaysCompletedActivities } from '../../utils/gamesHub';
+import { getTodaysCompletedActivities, getTodaysActivityCount } from '../../utils/gamesHub';
 
 function daysTogether(startDate) {
   if (!startDate) return 0;
@@ -43,7 +42,8 @@ function daysTogether(startDate) {
 export default function HomeScreen({ navigation }) {
   const { profile } = useContext(AuthContext);
   const { couple, loading, error } = useCouple();
-  const { dailyStatus, sessions, hes10Rounds, partnerId } = useGamesHub();
+  const { dailyStatus, sessions, hes10Rounds, dareDropHistory, partnerId } = useGamesHub();
+  const activityOptions = { sessions, dareDropHistory };
   const [calendarVisible, setCalendarVisible] = useState(false);
   const streakDates = useMemo(() => getStreakHistoryDates(couple), [couple]);
 
@@ -69,8 +69,8 @@ export default function HomeScreen({ navigation }) {
 
   const streak = getStreakCount(couple);
   const points = couple?.points || 0;
-  const activitiesToday = getDisplayActivitiesToday(couple);
-  const todaysActivities = getTodaysCompletedActivities(couple, { sessions });
+  const todaysActivities = getTodaysCompletedActivities(couple, activityOptions);
+  const activitiesToday = getTodaysActivityCount(couple, activityOptions);
   const level = getLevel(points);
   const progress = getProgressToNextLevel(points);
   const nextUnlock = getNextUnlock(couple);
@@ -110,7 +110,11 @@ export default function HomeScreen({ navigation }) {
             </View>
           </LinearGradient>
 
-          <FreezeStreakCard couple={couple} coupleId={profile?.coupleId} />
+          <FreezeStreakCard
+            couple={couple}
+            coupleId={profile?.coupleId}
+            activitiesToday={activitiesToday}
+          />
 
           <View style={[styles.activityCard, SHADOWS.card]}>
             <Text style={styles.activityTitle}>Today&apos;s Activities</Text>
@@ -209,6 +213,7 @@ export default function HomeScreen({ navigation }) {
                 const target = getGameNavigationTarget(game.id, {
                   sessions,
                   hes10Rounds,
+                  dareDropHistory,
                   userId: profile?.uid,
                   partnerId,
                   partnerName: profile?.partnerName,

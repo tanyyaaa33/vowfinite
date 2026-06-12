@@ -157,7 +157,9 @@ export default function StreakCalendarModal({
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendSwatch, styles.legendToday]}>
-                <Text style={styles.legendTodayNum}>12</Text>
+                <Text style={styles.legendTodayNum}>
+                  {Number(todayKey.split('-')[2])}
+                </Text>
               </View>
               <Text style={styles.legendLabel}>Today</Text>
             </View>

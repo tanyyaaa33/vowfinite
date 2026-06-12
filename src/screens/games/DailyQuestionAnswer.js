@@ -32,7 +32,7 @@ import { nudgePartner } from '../../utils/nudgePartner';
 import { useCouple } from '../../hooks/useCouple';
 import { saveGameSession, getCoupleMemberIds } from '../../utils/firebase';
 import { notifyPartner, NOTIFICATION_TYPES } from '../../utils/notifications';
-import { getDateKey, getStreakCount, ACTIVITIES_REQUIRED } from '../../utils/points';
+import { getDateKey, getStreakCount, getDisplayActivitiesToday, ACTIVITIES_REQUIRED } from '../../utils/points';
 import {
   subscribeToDailyQuestion,
   submitDailyQuestionAnswer,
@@ -315,7 +315,7 @@ export default function DailyQuestionAnswer({ navigation, route }) {
   };
 
   const streak = getStreakCount(couple);
-  const activitiesToday = couple?.activitiesToday ?? 0;
+  const activitiesToday = getDisplayActivitiesToday(couple);
   const canSubmit = Boolean(answer.trim()) && (!submitted || editing) && !submitting;
   const screenLoading = coupleLoading || (Boolean(profile?.coupleId) && !docReady);
 
