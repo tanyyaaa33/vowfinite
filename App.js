@@ -3,7 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import {
@@ -81,7 +82,13 @@ function TabIcon({ emoji, focused }) {
   );
 }
 
+const TAB_BAR_HEIGHT = 60;
+const TAB_BAR_PADDING_BOTTOM = 6;
+
 function MainTabs() {
+  const insets = useSafeAreaInsets();
+  const tabBarPaddingBottom = Math.max(insets.bottom, TAB_BAR_PADDING_BOTTOM);
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -93,8 +100,8 @@ function MainTabs() {
           borderTopColor: COLORS.border,
           borderTopWidth: 1,
           paddingTop: 4,
-          paddingBottom: 6,
-          height: 60,
+          paddingBottom: tabBarPaddingBottom,
+          height: TAB_BAR_HEIGHT + tabBarPaddingBottom - TAB_BAR_PADDING_BOTTOM,
         },
         tabBarLabelStyle: {
           fontFamily: FONTS.medium,
@@ -395,6 +402,7 @@ export default function App() {
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
       <PointsToastProvider>
         <AuthContext.Provider value={authContextValue}>
@@ -417,6 +425,7 @@ export default function App() {
         </AuthContext.Provider>
       </PointsToastProvider>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

@@ -1,9 +1,10 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AvatarCircle from '../../components/AvatarCircle';
 import StreakBadge from '../../components/StreakBadge';
+import StreakCalendarModal from '../../components/StreakCalendarModal';
 import GameCard from '../../components/GameCard';
 import ProgressBar from '../../components/ProgressBar';
 import ScreenLoader from '../../components/ScreenLoader';
@@ -23,8 +24,11 @@ import {
   formatPoints,
   getStreakCount,
   getNextUnlock,
+  getDisplayActivitiesToday,
+  getStreakHistoryDates,
   ACTIVITIES_REQUIRED,
 } from '../../utils/points';
+import { getTodaysCompletedActivities } from '../../utils/gamesHub';
 
 function daysTogether(startDate) {
   if (!startDate) return 0;
@@ -40,6 +44,8 @@ export default function HomeScreen({ navigation }) {
   const { profile } = useContext(AuthContext);
   const { couple, loading, error } = useCouple();
   const { dailyStatus, sessions, hes10Rounds, partnerId } = useGamesHub();
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const streakDates = useMemo(() => getStreakHistoryDates(couple), [couple]);
 
   if (loading) {
     return (
@@ -63,7 +69,8 @@ export default function HomeScreen({ navigation }) {
 
   const streak = getStreakCount(couple);
   const points = couple?.points || 0;
-  const activitiesToday = couple?.activitiesToday ?? 0;
+  const activitiesToday = getDisplayActivitiesToday(couple);
+  const todaysActivities = getTodaysCompletedActivities(couple, { sessions });
   const level = getLevel(points);
   const progress = getProgressToNextLevel(points);
   const nextUnlock = getNextUnlock(couple);
@@ -81,7 +88,11 @@ export default function HomeScreen({ navigation }) {
                 {profile?.name || 'Love'}
               </Text>
             </View>
-            <StreakBadge count={streak} activitiesToday={activitiesToday} />
+            <StreakBadge
+              count={streak}
+              activitiesToday={activitiesToday}
+              onPress={() => setCalendarVisible(true)}
+            />
           </View>
 
           <LinearGradient colors={GRADIENTS.primary} style={[styles.heroCard, SHADOWS.strong]}>
@@ -102,13 +113,25 @@ export default function HomeScreen({ navigation }) {
           <FreezeStreakCard couple={couple} coupleId={profile?.coupleId} />
 
           <View style={[styles.activityCard, SHADOWS.card]}>
-            <Text style={styles.activityTitle}>Today's Activities</Text>
+            <Text style={styles.activityTitle}>Today&apos;s Activities</Text>
             <Text style={styles.activityDesc}>
               Complete {ACTIVITIES_REQUIRED} game activities today to keep your streak alive
             </Text>
-            <Text style={styles.activityHint}>
-              Any game counts — Daily Question, Who&apos;s More Likely, Voice Bomb, and more
-            </Text>
+            {todaysActivities.length > 0 ? (
+              <View style={styles.activityList}>
+                {todaysActivities.map((activity) => (
+                  <View key={activity.id} style={styles.activityRow}>
+                    <Text style={styles.activityEmoji}>{activity.emoji}</Text>
+                    <Text style={styles.activityName}>{activity.title}</Text>
+                    <Text style={styles.activityCheck}>✓</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.activityHint}>
+                No activities yet — try Daily Question, Who&apos;s More Likely, Voice Bomb, and more
+              </Text>
+            )}
             <View style={styles.activityDots}>
               {Array.from({ length: ACTIVITIES_REQUIRED }).map((_, i) => (
                 <View
@@ -199,6 +222,13 @@ export default function HomeScreen({ navigation }) {
             />
           ))}
         </ScrollView>
+
+        <StreakCalendarModal
+          visible={calendarVisible}
+          onClose={() => setCalendarVisible(false)}
+          streakDates={streakDates}
+          currentStreak={streak}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -275,6 +305,33 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginBottom: 12,
     lineHeight: 17,
+  },
+  activityList: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  activityEmoji: {
+    fontSize: 18,
+  },
+  activityName: {
+    flex: 1,
+    fontFamily: FONTS.medium,
+    fontSize: 13,
+    color: COLORS.textPrimary,
+  },
+  activityCheck: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    color: COLORS.pink,
   },
   activityDots: {
     flexDirection: 'row',

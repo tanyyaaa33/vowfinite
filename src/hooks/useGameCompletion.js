@@ -10,7 +10,7 @@ export function useGameCompletion() {
   const hasCompleted = useRef(false);
 
   const completeGame = useCallback(
-    async (points, action, suffix = '⭐', dedupKey = null) => {
+    async (points, action, suffix = '⭐', dedupKey = null, options = {}) => {
       if (hasCompleted.current) return null;
       hasCompleted.current = true;
       if (!profile?.coupleId) {
@@ -23,7 +23,8 @@ export function useGameCompletion() {
           profile.coupleId,
           points,
           action,
-          dedupKey
+          dedupKey,
+          options
         );
 
         if (result?.alreadyAwarded) {

@@ -26,6 +26,7 @@ export default function GamesHubScreen({ navigation }) {
     error,
     streak,
     activitiesToday,
+    couple,
     totalPoints,
     todayQuestion,
     dailyStatus,
@@ -96,6 +97,7 @@ export default function GamesHubScreen({ navigation }) {
             <StreakSectionCard
               streak={streak ?? 0}
               activitiesToday={activitiesToday ?? 0}
+              couple={couple}
             />
 
             <DailyQuestionFeaturedCard

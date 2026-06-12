@@ -100,6 +100,66 @@ export function getStreakCount(couple) {
   return couple.currentStreak ?? couple.streak ?? 0;
 }
 
+export function getDisplayActivitiesToday(couple) {
+  const raw = couple?.activitiesToday ?? 0;
+  return Math.min(Math.max(raw, 0), ACTIVITIES_REQUIRED);
+}
+
+export function getStreakHistoryDates(couple) {
+  const dates = new Set();
+  const streakDays = couple?.streakDays;
+
+  if (streakDays && typeof streakDays === 'object') {
+    Object.entries(streakDays).forEach(([dateKey, secured]) => {
+      if (secured) dates.add(dateKey);
+    });
+  }
+
+  if (couple?.streakSecuredDate) {
+    dates.add(couple.streakSecuredDate);
+  }
+
+  return dates;
+}
+
+function buildStreakGoalUpdates(data, today = getDateKey()) {
+  if ((data?.activitiesToday ?? 0) < ACTIVITIES_REQUIRED) {
+    return null;
+  }
+  if (data?.streakSecuredDate === today) {
+    return null;
+  }
+
+  const lastSecured = data?.streakSecuredDate;
+  let currentStreak = getStreakCount(data);
+
+  if (!lastSecured) {
+    currentStreak = 1;
+  } else {
+    const gap = daysBetween(lastSecured, today);
+    if (gap === 1) {
+      currentStreak += 1;
+    } else if (gap > 1) {
+      currentStreak = 1;
+    }
+  }
+
+  const longestStreak = Math.max(data?.longestStreak ?? 0, currentStreak);
+  const updates = {
+    currentStreak,
+    streak: currentStreak,
+    longestStreak,
+    streakSecuredDate: today,
+    [`streakDays.${today}`]: true,
+  };
+
+  if (MILESTONE_DAYS.includes(currentStreak)) {
+    updates.pendingMilestone = currentStreak;
+  }
+
+  return updates;
+}
+
 export function getFreezeTokens(couple) {
   return couple?.freezeTokens ?? 0;
 }
@@ -244,17 +304,27 @@ export async function incrementActivity(coupleId) {
     let activitiesToday = data.activitiesToday ?? 0;
 
     if (lastActivityDate === today) {
-      activitiesToday += 1;
+      if (activitiesToday < ACTIVITIES_REQUIRED) {
+        activitiesToday += 1;
+      }
     } else {
       activitiesToday = 1;
     }
 
-    await updateDoc(ref, {
+    const updates = {
       activitiesToday,
       lastActivityDate: today,
-    });
+    };
 
-    const streak = getStreakCount(data);
+    const streakGoalData = { ...data, activitiesToday };
+    const streakUpdates = buildStreakGoalUpdates(streakGoalData, today);
+    if (streakUpdates) {
+      Object.assign(updates, streakUpdates);
+    }
+
+    await updateDoc(ref, updates);
+
+    const streak = streakUpdates?.currentStreak ?? getStreakCount(data);
     try {
       await scheduleStreakRiskNotification(streak, activitiesToday);
     } catch (notifError) {
@@ -278,6 +348,18 @@ export async function checkStreak(coupleId) {
     const lastCheck = data.lastStreakCheckDate || data.lastActivityDate || today;
 
     if (lastCheck === today) {
+      const streakUpdates = buildStreakGoalUpdates(data, today);
+      if (streakUpdates) {
+        await updateDoc(ref, streakUpdates);
+        return {
+          currentStreak: streakUpdates.currentStreak,
+          activitiesToday: data.activitiesToday ?? 0,
+          streakReset: false,
+          pendingMilestone: streakUpdates.pendingMilestone ?? data.pendingMilestone ?? null,
+          freezeTokens: data.freezeTokens ?? 0,
+        };
+      }
+
       return {
         currentStreak: getStreakCount(data),
         activitiesToday: data.activitiesToday ?? 0,
@@ -296,15 +378,7 @@ export async function checkStreak(coupleId) {
     let pendingMilestone = data.pendingMilestone ?? null;
 
     if (gap === 1) {
-      if (activitiesYesterday >= ACTIVITIES_REQUIRED || streakProtected) {
-        currentStreak += 1;
-        if (currentStreak > longestStreak) {
-          longestStreak = currentStreak;
-        }
-        if (MILESTONE_DAYS.includes(currentStreak)) {
-          pendingMilestone = currentStreak;
-        }
-      } else {
+      if (activitiesYesterday < ACTIVITIES_REQUIRED && !streakProtected) {
         currentStreak = 0;
         streakReset = true;
       }
@@ -433,7 +507,13 @@ export async function deductPoints(coupleId, points, action) {
   }
 }
 
-export async function completeGameActivity(coupleId, points, action, dedupKey = null) {
+export async function completeGameActivity(
+  coupleId,
+  points,
+  action,
+  dedupKey = null,
+  { countsTowardStreak = true } = {}
+) {
   try {
     const claimKey = dedupKey || `${action}_${getDateKey()}`;
     const { ref, data } = await fetchCouple(coupleId);
@@ -443,10 +523,16 @@ export async function completeGameActivity(coupleId, points, action, dedupKey = 
         newPoints: data.points ?? 0,
         newUnlocks: [],
         alreadyAwarded: true,
+        activitiesToday: data.activitiesToday ?? 0,
       };
     }
 
-    const activityResult = await incrementActivity(coupleId);
+    const activityResult = countsTowardStreak
+      ? await incrementActivity(coupleId)
+      : {
+          activitiesToday: data.activitiesToday ?? 0,
+          streak: getStreakCount(data),
+        };
     const pointsResult = await addPoints(coupleId, points, action, claimKey);
 
     const syncKey = `partner-sync_${getDateKey()}`;

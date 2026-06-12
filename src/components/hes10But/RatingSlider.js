@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -19,65 +19,67 @@ export default function RatingSlider({ value, onChange, numberSize = 44 }) {
   const [trackWidth, setTrackWidth] = useState(0);
   const translateX = useSharedValue(0);
   const startX = useSharedValue(0);
+  const maxTravel = useSharedValue(0);
 
-  const maxTravel = useMemo(
-    () => Math.max(trackWidth - THUMB_SIZE, 0),
-    [trackWidth]
-  );
+  useEffect(() => {
+    maxTravel.value = Math.max(trackWidth - THUMB_SIZE, 0);
+    if (trackWidth > 0) {
+      const clamped = Math.min(Math.max(value || MIN_VALUE, MIN_VALUE), MAX_VALUE);
+      const travel = maxTravel.value;
+      translateX.value =
+        travel <= 0
+          ? 0
+          : ((clamped - MIN_VALUE) / (MAX_VALUE - MIN_VALUE)) * travel;
+    }
+  }, [trackWidth, value, maxTravel, translateX]);
 
-  const valueToX = useCallback(
-    (nextValue) => {
-      if (maxTravel <= 0) return 0;
-      return ((nextValue - MIN_VALUE) / (MAX_VALUE - MIN_VALUE)) * maxTravel;
-    },
-    [maxTravel]
-  );
-
-  const xToValue = useCallback(
-    (x) => {
-      if (maxTravel <= 0) return MIN_VALUE;
-      const ratio = Math.min(Math.max(x / maxTravel, 0), 1);
-      return Math.round(MIN_VALUE + ratio * (MAX_VALUE - MIN_VALUE));
-    },
-    [maxTravel]
-  );
-
-  const applyValue = useCallback(
+  const emitValue = useCallback(
     (nextValue) => {
       try {
         const clamped = Math.min(Math.max(nextValue, MIN_VALUE), MAX_VALUE);
         onChange?.(clamped);
-        translateX.value = valueToX(clamped);
       } catch (error) {
-        console.warn('RatingSlider applyValue failed:', error.message);
+        console.warn('RatingSlider onChange failed:', error.message);
       }
     },
-    [onChange, translateX, valueToX]
+    [onChange]
   );
 
-  useEffect(() => {
-    if (trackWidth > 0) {
-      translateX.value = valueToX(value || MIN_VALUE);
-    }
-  }, [trackWidth, value, translateX, valueToX]);
-
   const pan = Gesture.Pan()
-    .enabled(maxTravel > 0)
+    .enabled(trackWidth > THUMB_SIZE)
     .onBegin(() => {
       startX.value = translateX.value;
     })
     .onUpdate((event) => {
-      const nextX = Math.min(Math.max(startX.value + event.translationX, 0), maxTravel);
+      const travel = maxTravel.value;
+      const nextX = Math.min(Math.max(startX.value + event.translationX, 0), travel);
       translateX.value = nextX;
-      runOnJS(applyValue)(xToValue(nextX));
+
+      if (travel <= 0) {
+        runOnJS(emitValue)(MIN_VALUE);
+        return;
+      }
+
+      const ratio = Math.min(Math.max(nextX / travel, 0), 1);
+      const nextValue = Math.round(MIN_VALUE + ratio * (MAX_VALUE - MIN_VALUE));
+      runOnJS(emitValue)(nextValue);
     });
 
   const tap = Gesture.Tap()
-    .enabled(maxTravel > 0)
+    .enabled(trackWidth > THUMB_SIZE)
     .onEnd((event) => {
-      const nextX = Math.min(Math.max(event.x - THUMB_SIZE / 2, 0), maxTravel);
+      const travel = maxTravel.value;
+      const nextX = Math.min(Math.max(event.x - THUMB_SIZE / 2, 0), travel);
       translateX.value = nextX;
-      runOnJS(applyValue)(xToValue(nextX));
+
+      if (travel <= 0) {
+        runOnJS(emitValue)(MIN_VALUE);
+        return;
+      }
+
+      const ratio = Math.min(Math.max(nextX / travel, 0), 1);
+      const nextValue = Math.round(MIN_VALUE + ratio * (MAX_VALUE - MIN_VALUE));
+      runOnJS(emitValue)(nextValue);
     });
 
   const composed = Gesture.Race(pan, tap);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { COLORS, GRADIENTS } from '../constants/colors';
@@ -7,11 +7,16 @@ import { FONTS } from '../constants/fonts';
 
 const TOTAL_ACTIVITIES = 3;
 
-export default function StreakBadge({ count = 0, activitiesToday = 0 }) {
+export default function StreakBadge({ count = 0, activitiesToday = 0, onPress }) {
   const filledPills = Math.min(Math.max(activitiesToday, 0), TOTAL_ACTIVITIES);
 
   return (
-    <View style={styles.container}>
+    <TouchableOpacity
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={0.85}
+      disabled={!onPress}
+    >
       <View style={styles.topRow}>
         <Text style={styles.heart}>💗</Text>
         <MaskedView
@@ -53,7 +58,7 @@ export default function StreakBadge({ count = 0, activitiesToday = 0 }) {
           {filledPills}/{TOTAL_ACTIVITIES} today
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

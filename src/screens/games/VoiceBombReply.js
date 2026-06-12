@@ -233,7 +233,8 @@ export default function VoiceBombReply({ route, navigation }) {
           POINTS.VOICE_BOMB_REPLY,
           'voice-bomb-reply',
           '🎙️',
-          `voice-bomb-reply_${voiceBombId}`
+          `voice-bomb-reply_${voiceBombId}`,
+          { countsTowardStreak: false }
         );
       } catch (pointsError) {
         console.warn('Reply points failed:', pointsError.message);

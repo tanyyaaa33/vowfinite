@@ -18,6 +18,100 @@ export function getCoupleTotalPoints(couple) {
   return couple.totalPoints ?? couple.points ?? 0;
 }
 
+const ACTIVITY_ACTIONS = [
+  'daily-question',
+  'who-more-likely',
+  'hes-a-10-but',
+  'dare-drop',
+  'voice-bomb',
+  'voice-bomb-reply',
+];
+
+const ACTIVITY_DISPLAY = Object.fromEntries(
+  (HUB_GAMES || []).map((game) => [game.id, { title: game.title, emoji: game.emoji }])
+);
+ACTIVITY_DISPLAY['voice-bomb-reply'] = { title: 'Voice Bomb Reply', emoji: '💬' };
+
+function isTimestampIdFromToday(id, todayKey = getDateKey()) {
+  const ts = parseInt(String(id).split('_')[0], 10);
+  if (!Number.isFinite(ts) || ts <= 0) return false;
+  return getDateKey(new Date(ts)) === todayKey;
+}
+
+function isClaimKeyFromToday(key, action, todayKey = getDateKey()) {
+  const suffix = key.slice(`${action}_`.length);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(suffix)) {
+    return suffix === todayKey;
+  }
+  return isTimestampIdFromToday(suffix, todayKey);
+}
+
+function getClaimSortTime(key, action) {
+  const suffix = key.slice(`${action}_`.length);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(suffix)) {
+    return new Date(`${suffix}T12:00:00`).getTime();
+  }
+  const ts = parseInt(String(suffix).split('_')[0], 10);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function getGuestTodaysActivities(sessions, todayKey = getDateKey()) {
+  const list = Array.isArray(sessions) ? sessions : [];
+  const seen = new Set();
+  const activities = [];
+
+  for (const session of list) {
+    if (!isSessionToday(session, todayKey)) continue;
+    const meta = ACTIVITY_DISPLAY[session.gameId];
+    if (!meta || seen.has(session.gameId)) continue;
+    seen.add(session.gameId);
+    activities.push({
+      id: session.gameId,
+      title: meta.title,
+      emoji: meta.emoji,
+    });
+  }
+
+  return activities;
+}
+
+export function getTodaysCompletedActivities(
+  couple,
+  { sessions = [], todayKey = getDateKey() } = {}
+) {
+  if (couple?.lastActivityDate && couple.lastActivityDate !== todayKey) {
+    return [];
+  }
+
+  const claimed = couple?.pointsClaimed;
+  if (!claimed || typeof claimed !== 'object') {
+    return getGuestTodaysActivities(sessions, todayKey);
+  }
+
+  const activities = [];
+
+  for (const [key, value] of Object.entries(claimed)) {
+    if (!value || key.startsWith('partner-sync_')) continue;
+
+    const action = ACTIVITY_ACTIONS.find((name) => key.startsWith(`${name}_`));
+    if (!action || !isClaimKeyFromToday(key, action, todayKey)) continue;
+
+    const meta = ACTIVITY_DISPLAY[action];
+    if (!meta) continue;
+
+    activities.push({
+      id: key,
+      title: meta.title,
+      emoji: meta.emoji,
+      sortTime: getClaimSortTime(key, action),
+    });
+  }
+
+  return activities
+    .sort((a, b) => a.sortTime - b.sortTime)
+    .map(({ id, title, emoji }) => ({ id, title, emoji }));
+}
+
 function sessionDateKey(session) {
   if (session?.dateKey) return session.dateKey;
   const ts = session?.createdAt;
