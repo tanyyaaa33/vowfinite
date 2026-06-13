@@ -173,14 +173,8 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
   const { showPoints } = usePointsToast();
   const { completeGame } = useGameCompletion();
 
-  const {
-    questions: routeQuestions = [],
-    dateKey,
-    userAnswers: routeUserAnswers = {},
-    partnerAnswers: routePartnerAnswers = {},
-    matchCount: routeMatchCount,
-    questionCount: routeQuestionCount,
-  } = route.params || {};
+  const routeParams = route.params || {};
+  const activeDateKey = routeParams.dateKey || getDateKey();
 
   const [ready, setReady] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
@@ -204,32 +198,36 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
   }, [couple?.members, sessionData]);
 
   const questions = useMemo(() => {
-    if (routeQuestions.length) return routeQuestions;
+    if (routeParams.questions?.length) return routeParams.questions;
     return getSessionQuestions(sessionData, []);
-  }, [routeQuestions, sessionData]);
+  }, [routeParams.questions, sessionData]);
 
-  const questionCount = routeQuestionCount || getQuestionCount(sessionData) || questions.length || WHO_MORE_LIKELY_BATCH_SIZE;
+  const questionCount =
+    routeParams.questionCount ||
+    getQuestionCount(sessionData) ||
+    questions.length ||
+    WHO_MORE_LIKELY_BATCH_SIZE;
 
   const resolvedUserAnswers = useMemo(() => {
     if (sessionData && profile?.uid && memberList.length) {
       return getUserAnswersMap(sessionData, profile.uid, memberList);
     }
-    return routeUserAnswers;
-  }, [sessionData, profile?.uid, memberList, routeUserAnswers]);
+    return routeParams.userAnswers || {};
+  }, [sessionData, profile?.uid, memberList, routeParams.userAnswers]);
 
   const resolvedPartnerAnswers = useMemo(() => {
     if (sessionData && profile?.uid && memberList.length) {
       return getPartnerAnswersMap(sessionData, profile.uid, memberList);
     }
-    return routePartnerAnswers;
-  }, [sessionData, profile?.uid, memberList, routePartnerAnswers]);
+    return routeParams.partnerAnswers || {};
+  }, [sessionData, profile?.uid, memberList, routeParams.partnerAnswers]);
 
   const matchCount =
-    routeMatchCount ?? getMatchCountFromDoc(sessionData) ?? 0;
+    routeParams.matchCount ?? getMatchCountFromDoc(sessionData) ?? 0;
 
   const matchPercent = questionCount > 0 ? Math.round((matchCount / questionCount) * 100) : 0;
   const perfectMatch = matchCount === questionCount;
-  const isValid = Boolean(questions.length && dateKey);
+  const isValid = Boolean(questions.length && activeDateKey);
 
   useEffect(() => {
     isMounted.current = true;
@@ -252,16 +250,20 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
   }, []);
 
   useEffect(() => {
-    if (!ready) return undefined;
+    if (!ready || !sessionReady) return undefined;
     if (!isValid) {
       try {
-        navigation.goBack();
+        if (profile?.coupleId) {
+          navigation.replace('WhoMoreLikelyQuestion');
+        } else {
+          navigation.goBack();
+        }
       } catch (error) {
-        console.warn('Reveal goBack failed:', error.message);
+        console.warn('Reveal redirect failed:', error.message);
       }
     }
     return undefined;
-  }, [ready, isValid, navigation]);
+  }, [ready, sessionReady, isValid, navigation, profile?.coupleId]);
 
   useEffect(() => {
     if (couple?.whoMoreLikelyStats) {
@@ -270,7 +272,7 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
   }, [couple?.whoMoreLikelyStats]);
 
   useEffect(() => {
-    if (!profile?.coupleId || !dateKey) {
+    if (!profile?.coupleId) {
       setSessionReady(true);
       return undefined;
     }
@@ -279,7 +281,7 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
 
     const unsubscribe = subscribeToWhoMoreLikely(
       profile.coupleId,
-      dateKey,
+      activeDateKey,
       (docData) => {
         if (!active || !isMounted.current) return;
         try {
@@ -308,7 +310,7 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
       active = false;
       unsubscribe();
     };
-  }, [profile?.coupleId, dateKey]);
+  }, [profile?.coupleId, activeDateKey]);
 
   useEffect(() => {
     if (!isValid || pointsAwarded.current) return undefined;
@@ -318,9 +320,9 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
 
     (async () => {
       try {
-        if (profile?.coupleId && dateKey && !statsFinalized.current) {
+        if (profile?.coupleId && activeDateKey && !statsFinalized.current) {
           statsFinalized.current = true;
-          const snapshot = await finalizeWhoMoreLikelyRound(profile.coupleId, dateKey, {
+          const snapshot = await finalizeWhoMoreLikelyRound(profile.coupleId, activeDateKey, {
             bothCompleted: true,
             bothAnswered: true,
             player1Answers: sessionData?.player1Answers,
@@ -357,7 +359,7 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
     completeGame,
     showPoints,
     profile?.coupleId,
-    dateKey,
+    activeDateKey,
     matchCount,
     questionCount,
     sessionData?.player1Answers,
@@ -489,7 +491,7 @@ export default function WhoMoreLikelyReveal({ route, navigation }) {
                     try {
                       await saveWhoMoreLikelyArgument(
                         profile.coupleId,
-                        dateKey || getDateKey(),
+                        activeDateKey,
                         profile.uid,
                         memberList,
                         myArgument.trim()

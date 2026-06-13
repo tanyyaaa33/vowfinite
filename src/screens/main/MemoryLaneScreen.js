@@ -144,7 +144,7 @@ export default function MemoryLaneScreen({ navigation }) {
                   {item.type === 'daily'
                     ? 'Daily Question'
                     : item.type === 'hes10'
-                      ? "He's a 10 But"
+                      ? "They're a 10 But"
                       : item.type === 'voice'
                         ? 'Voice Bomb'
                         : 'Dare Drop'}

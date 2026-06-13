@@ -19,24 +19,11 @@ export function getHes10RoundRef(coupleId, roundId) {
   return doc(db, 'couples', coupleId, 'hes10But', roundId);
 }
 
-export function getHes10Starter(profile = {}) {
-  const gender = String(
-    profile.partnerGender || profile.partnerPronoun || ''
-  ).toLowerCase();
-
-  if (['female', 'f', 'woman', 'she', 'her'].includes(gender)) {
-    return "She's a 10 but";
-  }
-  if (['male', 'm', 'man', 'he', 'him'].includes(gender)) {
-    return "He's a 10 but";
-  }
+export function getHes10Starter() {
   return "They're a 10 but";
 }
 
-export function getPartnerSubjectPronoun(profile = {}) {
-  const gender = String(profile.partnerGender || '').toLowerCase();
-  if (['female', 'f', 'woman', 'she'].includes(gender)) return 'She';
-  if (['male', 'm', 'man', 'he'].includes(gender)) return 'He';
+export function getPartnerSubjectPronoun() {
   return 'They';
 }
 

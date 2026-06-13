@@ -1,6 +1,4 @@
-import { getDailyQuestionStatus, getWhoMoreLikelyStatus } from './gamesHub';
-import { getHes10NavigationTarget } from './hes10But';
-import {
+import { getHes10NavigationTarget } from './hes10But';import {
   findPartnerDareNeedingReaction,
   findUserDareToday,
   getDareNavigationParams,
@@ -34,21 +32,11 @@ export function getGameNavigationTarget(gameId, context = {}) {
     case 'hes-a-10-but':
       return getHes10NavigationTarget(hes10Rounds, userId);
 
-    case 'daily-question': {
-      const status = getDailyQuestionStatus(sessions, userId, partnerId, partnerName);
-      if (status.status === 'both') {
-        return { screen: 'DailyQuestionReveal', params: {} };
-      }
+    case 'daily-question':
       return { screen: 'DailyQuestionAnswer', params: {} };
-    }
 
-    case 'who-more-likely': {
-      const status = getWhoMoreLikelyStatus(sessions, userId, partnerId, partnerName);
-      if (status.status === 'both') {
-        return { screen: 'WhoMoreLikelyReveal', params: {} };
-      }
+    case 'who-more-likely':
       return { screen: 'WhoMoreLikelyQuestion', params: {} };
-    }
 
     case 'dare-drop': {
       const partnerReactionDare = findPartnerDareNeedingReaction(dareDropHistory, userId);

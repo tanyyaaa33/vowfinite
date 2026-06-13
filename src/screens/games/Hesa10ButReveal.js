@@ -341,7 +341,7 @@ export default function Hesa10ButReveal({ route, navigation }) {
   }, [fullSentence, userName, partnerName, creatorRating, partnerRating]);
 
   const showNudge = shouldShowBotherNudge(history);
-  const partnerPronoun = getPartnerSubjectPronoun(profile);
+  const partnerPronoun = getPartnerSubjectPronoun();
 
   const userComment = round
     ? getUserCommentFromRound(round, profile?.uid, memberList)
@@ -493,7 +493,7 @@ export default function Hesa10ButReveal({ route, navigation }) {
                   <Text style={styles.nudgeEmoji}>💝</Text>
                   <View style={styles.nudgeTextWrap}>
                     <Text style={styles.nudgeTitle} numberOfLines={2}>
-                      {partnerPronoun} seems genuinely bothered. Here&apos;s what you can do 💝
+                      {partnerPronoun} seem genuinely bothered. Here&apos;s what you can do 💝
                     </Text>
                     <Text style={styles.nudgeLink}>Open Surprise →</Text>
                   </View>

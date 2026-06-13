@@ -27,10 +27,14 @@ import { COLORS, SHADOWS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { SCREEN_PADDING } from '../../constants/layout';
 import { getCoupleMemberIds } from '../../utils/firebase';
+import { getDailyQuestionForDate, parseDateKey } from '../../constants/gameData';
 import { POINTS, getDateKey } from '../../utils/points';
 import {
   getConversationStarter,
   saveDailyQuestionReaction,
+  subscribeToDailyQuestion,
+  getUserAnswerFromDoc,
+  getPartnerAnswerFromDoc,
 } from '../../utils/dailyQuestion';
 
 function AnswerCard({ name, answer, align, delay, children }) {
@@ -72,13 +76,13 @@ export default function DailyQuestionReveal({ route, navigation }) {
   const { showPoints } = usePointsToast();
   const { completeGame } = useGameCompletion();
 
-  const {
-    question,
-    category = 'Deep',
-    answer,
-    partnerAnswer,
-    dateKey,
-  } = route.params || {};
+  const routeParams = route.params || {};
+  const activeDateKey = routeParams.dateKey || getDateKey();
+  const fallbackMeta = getDailyQuestionForDate(parseDateKey(activeDateKey));
+
+  const [loadedDoc, setLoadedDoc] = useState(null);
+  const [docReady, setDocReady] = useState(false);
+  const [members, setMembers] = useState([]);
 
   const [userReaction, setUserReaction] = useState(null);
   const [partnerReaction, setPartnerReaction] = useState(null);
@@ -86,9 +90,24 @@ export default function DailyQuestionReveal({ route, navigation }) {
 
   const pointsAwarded = useRef(false);
   const isMounted = useRef(true);
+  const membersRef = useRef([]);
 
-  const safeAnswer = answer?.trim() || '';
-  const safePartnerAnswer = partnerAnswer?.trim() || '';
+  const question =
+    routeParams.question || loadedDoc?.question || fallbackMeta.question || '';
+  const category =
+    routeParams.category || loadedDoc?.category || fallbackMeta.category || 'Deep';
+  const safeAnswer =
+    routeParams.answer?.trim() ||
+    getUserAnswerFromDoc(loadedDoc, profile?.uid, members).trim();
+  const safePartnerAnswer =
+    routeParams.partnerAnswer?.trim() ||
+    getPartnerAnswerFromDoc(loadedDoc, profile?.uid, members).trim();
+  const dateKey = routeParams.dateKey || loadedDoc?.dateKey || activeDateKey;
+  const hasRouteAnswers = Boolean(
+    routeParams.question?.trim() &&
+      routeParams.answer?.trim() &&
+      routeParams.partnerAnswer?.trim()
+  );
   const isValid = Boolean(question?.trim() && safeAnswer && safePartnerAnswer);
   const conversationStarter = getConversationStarter(category, question);
 
@@ -100,6 +119,76 @@ export default function DailyQuestionReveal({ route, navigation }) {
   }, []);
 
   useEffect(() => {
+    if (couple?.members?.length) {
+      membersRef.current = couple.members;
+      setMembers(couple.members);
+    }
+  }, [couple?.members]);
+
+  useEffect(() => {
+    if (!profile?.coupleId) {
+      setDocReady(true);
+      return undefined;
+    }
+
+    let active = true;
+
+    (async () => {
+      try {
+        const ids = await getCoupleMemberIds(profile.coupleId);
+        if (active && ids.length) {
+          membersRef.current = ids;
+          setMembers(ids);
+        }
+      } catch (error) {
+        console.warn('DailyQuestionReveal members failed:', error.message);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [profile?.coupleId]);
+
+  useEffect(() => {
+    if (hasRouteAnswers) {
+      setDocReady(true);
+      return undefined;
+    }
+
+    if (!profile?.coupleId || !profile?.uid) {
+      setDocReady(true);
+      return undefined;
+    }
+
+    let active = true;
+
+    const unsubscribe = subscribeToDailyQuestion(
+      profile.coupleId,
+      activeDateKey,
+      (docData) => {
+        if (!active || !isMounted.current) return;
+        setLoadedDoc(docData);
+        setDocReady(true);
+      },
+      (error) => {
+        console.warn('DailyQuestionReveal listener failed:', error?.message);
+        if (active && isMounted.current) setDocReady(true);
+      }
+    );
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [
+    hasRouteAnswers,
+    profile?.coupleId,
+    profile?.uid,
+    activeDateKey,
+  ]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       if (isMounted.current) setReady(true);
     }, 80);
@@ -107,16 +196,20 @@ export default function DailyQuestionReveal({ route, navigation }) {
   }, []);
 
   useEffect(() => {
-    if (!ready) return undefined;
+    if (!ready || !docReady) return undefined;
     if (!isValid) {
       try {
-        navigation.goBack();
+        if (profile?.coupleId) {
+          navigation.replace('DailyQuestionAnswer', { dateKey: activeDateKey });
+        } else {
+          navigation.goBack();
+        }
       } catch (error) {
-        console.warn('Reveal goBack failed:', error.message);
+        console.warn('Reveal redirect failed:', error.message);
       }
     }
     return undefined;
-  }, [ready, isValid, navigation]);
+  }, [ready, docReady, isValid, navigation, profile?.coupleId, activeDateKey]);
 
   useEffect(() => {
     if (!isValid || pointsAwarded.current) return undefined;
@@ -194,7 +287,7 @@ export default function DailyQuestionReveal({ route, navigation }) {
     [profile?.coupleId, profile?.uid, dateKey, couple?.members]
   );
 
-  if (!ready || !isValid) {
+  if (!ready || !docReady || !isValid) {
     return (
       <View style={styles.screen}>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>

@@ -1,0 +1,32 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isCoupleMember(coupleId) {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/couples/$(coupleId))
+        && request.auth.uid in firestore.get(/databases/(default)/documents/couples/$(coupleId)).data.members;
+    }
+
+    match /voiceBombs/{coupleId}/{fileName} {
+      allow read: if isCoupleMember(coupleId);
+      allow write: if isCoupleMember(coupleId)
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+    }
+
+    match /avatars/{userId}.jpg {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

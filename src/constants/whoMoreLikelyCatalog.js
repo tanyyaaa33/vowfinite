@@ -1,4 +1,4 @@
-// 520 "Who's more likely" prompts — 104 unique daily batches before the cycle repeats.
+// 520 prompts with template variants — batches pick ~198 unique stems with variety.
 export const WHO_MORE_LIKELY = [
   "Who's more likely to plan a surprise date?",
   "Who's more likely to stay up late binge-watching?",

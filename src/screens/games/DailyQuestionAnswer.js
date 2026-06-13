@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -114,6 +115,12 @@ export default function DailyQuestionAnswer({ navigation, route }) {
       isMounted.current = false;
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      navigatedRef.current = false;
+    }, [])
+  );
 
   useEffect(() => {
     if (couple?.members?.length) {

@@ -37,7 +37,7 @@ export default function Hesa10ButCreate({ navigation }) {
   const { profile } = useContext(AuthContext);
   const { couple, loading: coupleLoading } = useCouple();
 
-  const starter = useMemo(() => getHes10Starter(profile), [profile]);
+  const starter = useMemo(() => getHes10Starter(), []);
   const [suffix, setSuffix] = useState('');
   const [focused, setFocused] = useState(false);
   const [sending, setSending] = useState(false);
@@ -231,7 +231,7 @@ export default function Hesa10ButCreate({ navigation }) {
               <Text style={styles.backArrow}>←</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              He&apos;s a 10 But 💅
+              They&apos;re a 10 But 💅
             </Text>
             <View style={styles.headerSpacer} />
           </View>
@@ -262,7 +262,7 @@ export default function Hesa10ButCreate({ navigation }) {
             <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            He&apos;s a 10 But 💅
+            They&apos;re a 10 But 💅
           </Text>
           <TouchableOpacity
             onPress={() => navigation.navigate('Hes10History')}

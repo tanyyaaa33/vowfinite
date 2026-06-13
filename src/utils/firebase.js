@@ -27,6 +27,7 @@ import {
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { GUEST_COUPLE, GUEST_PARTNER_ID } from '../constants/guestData';
 import { isGuestCoupleId } from './guestMode';
 
@@ -259,15 +260,82 @@ export async function uploadAvatar(userId, uri) {
   }
 }
 
-function uriToBlob(uri) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.onload = () => resolve(xhr.response);
-    xhr.onerror = () => reject(new TypeError('Could not read the voice recording.'));
-    xhr.responseType = 'blob';
-    xhr.open('GET', uri, true);
-    xhr.send(null);
+function normalizeRecordingUri(uri) {
+  if (!uri) return '';
+  if (uri.startsWith('file://') || uri.startsWith('content://')) {
+    return uri;
+  }
+  return `file://${uri}`;
+}
+
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function getAudioContentType(uri) {
+  const lower = String(uri || '').toLowerCase();
+  if (lower.endsWith('.caf')) return 'audio/x-caf';
+  if (lower.endsWith('.3gp')) return 'audio/3gpp';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  return 'audio/mp4';
+}
+
+async function readRecordingForUpload(uri) {
+  const normalizedUri = normalizeRecordingUri(uri);
+
+  try {
+    const info = await FileSystem.getInfoAsync(normalizedUri);
+    if (!info.exists) {
+      throw new Error('Recording file not found.');
+    }
+  } catch (infoError) {
+    console.warn('Recording file check failed:', infoError.message);
+  }
+
+  try {
+    const response = await fetch(normalizedUri);
+    if (response.ok) {
+      const blob = await response.blob();
+      if (blob?.size > 0) {
+        return { data: blob, contentType: blob.type || getAudioContentType(normalizedUri) };
+      }
+    }
+  } catch (fetchError) {
+    console.warn('fetch recording failed:', fetchError.message);
+  }
+
+  const base64 = await FileSystem.readAsStringAsync(normalizedUri, {
+    encoding: FileSystem.EncodingType.Base64,
   });
+  if (!base64) {
+    throw new Error('Could not read the voice recording.');
+  }
+
+  return {
+    data: base64ToUint8Array(base64),
+    contentType: getAudioContentType(normalizedUri),
+  };
+}
+
+function getStorageUploadErrorMessage(error) {
+  const code = error?.code || '';
+  const message = error?.message || '';
+
+  if (code === 'storage/unauthorized' || message.includes('storage/unauthorized')) {
+    return 'Voice upload is not permitted yet. Ask your partner to link accounts, then try again.';
+  }
+  if (code === 'storage/unauthenticated' || message.includes('storage/unauthenticated')) {
+    return 'Please sign in again before sending a voice bomb.';
+  }
+  if (message.includes('storage/unknown')) {
+    return 'Could not upload the recording. Check your internet connection and try again.';
+  }
+  return message || 'Could not upload the voice recording.';
 }
 
 export async function uploadVoiceRecording(coupleId, voiceBombId, uri, kind = 'message') {
@@ -279,8 +347,8 @@ export async function uploadVoiceRecording(coupleId, voiceBombId, uri, kind = 'm
       throw new Error('Create a free account to send voice bombs to your partner.');
     }
 
-    const blob = await uriToBlob(uri);
-    if (!blob || blob.size === 0) {
+    const { data, contentType } = await readRecordingForUpload(uri);
+    if (!data || (data.size !== undefined && data.size === 0)) {
       throw new Error('Could not read the voice recording.');
     }
 
@@ -288,11 +356,11 @@ export async function uploadVoiceRecording(coupleId, voiceBombId, uri, kind = 'm
       storage,
       `voiceBombs/${coupleId}/${voiceBombId}_${kind}.m4a`
     );
-    await uploadBytes(storageRef, blob, { contentType: 'audio/mp4' });
+    await uploadBytes(storageRef, data, { contentType });
     return getDownloadURL(storageRef);
   } catch (error) {
-    console.warn('uploadVoiceRecording failed:', error.message);
-    throw error;
+    console.warn('uploadVoiceRecording failed:', error?.code || error?.message);
+    throw new Error(getStorageUploadErrorMessage(error));
   }
 }
 

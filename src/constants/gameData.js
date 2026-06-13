@@ -21,7 +21,7 @@ export const HUB_GAMES = [
   },
   {
     id: 'hes-a-10-but',
-    title: "He's a 10 But",
+    title: "They're a 10 But",
     description: 'Send anytime — partner rates when ready',
     emoji: '💅',
     screens: ['Hesa10ButCreate', 'Hesa10ButRate', 'Hesa10ButReveal'],
@@ -71,7 +71,7 @@ export const GAMES = [
   },
   {
     id: 'hes-a-10-but',
-    title: 'He\'s a 10 But...',
+    title: 'They\'re a 10 But...',
     subtitle: 'Send anytime — partner rates when ready',
     description: 'Send anytime — partner rates when ready',
     emoji: '🔥',
@@ -140,20 +140,92 @@ export const DAILY_QUESTIONS = DAILY_QUESTIONS_CATALOG.map((item) => item.questi
 
 export const WHO_MORE_LIKELY_BATCH_SIZE = 5;
 
+function getWhoMoreLikelyStem(question) {
+  const cutPatterns = [
+    /\s+when\s+.+$/i,
+    /\s+on\s+(?:a\s+)?\w.+$/i,
+    /\s+at\s+(?:a\s+)?\w.+$/i,
+    /\s+during\s+.+$/i,
+    /\s+after\s+.+$/i,
+    /\s+before\s+.+$/i,
+    /\s+if\s+.+$/i,
+    /\s+while\s+.+$/i,
+  ];
+  let stem = String(question || '').trim();
+  for (const pattern of cutPatterns) {
+    const next = stem.replace(pattern, '');
+    if (next !== stem) {
+      stem = next;
+      break;
+    }
+  }
+  return stem;
+}
+
+let whoMoreLikelyPrimaryPoolCache = null;
+
+function getWhoMoreLikelyPrimaryPool() {
+  if (whoMoreLikelyPrimaryPoolCache) {
+    return whoMoreLikelyPrimaryPoolCache;
+  }
+
+  const seen = new Set();
+  const pool = [];
+
+  for (const question of WHO_MORE_LIKELY) {
+    const stem = getWhoMoreLikelyStem(question);
+    if (seen.has(stem)) continue;
+    seen.add(stem);
+    pool.push(question);
+  }
+
+  whoMoreLikelyPrimaryPoolCache = pool;
+  return pool;
+}
+
 export function getTodayWhoMoreLikelyQuestions(
   batchSize = WHO_MORE_LIKELY_BATCH_SIZE,
   date = new Date()
 ) {
-  if (!WHO_MORE_LIKELY.length) {
+  const pool = getWhoMoreLikelyPrimaryPool();
+  if (!pool.length) {
     return ['Who\'s more likely to plan a surprise date?'];
   }
 
-  const start = getCatalogIndexForDate(WHO_MORE_LIKELY.length, date);
+  const start = getCatalogIndexForDate(pool.length, date);
+  const stride = Math.max(1, Math.floor(pool.length / batchSize));
   const questions = [];
+  const usedStems = new Set();
+
   for (let i = 0; i < batchSize; i += 1) {
-    questions.push(WHO_MORE_LIKELY[(start + i) % WHO_MORE_LIKELY.length]);
+    let index = (start + i * stride) % pool.length;
+    let attempts = 0;
+
+    while (attempts < pool.length) {
+      const question = pool[index];
+      const stem = getWhoMoreLikelyStem(question);
+      if (!usedStems.has(stem)) {
+        usedStems.add(stem);
+        questions.push(question);
+        break;
+      }
+      index = (index + 1) % pool.length;
+      attempts += 1;
+    }
   }
-  return questions;
+
+  if (questions.length < batchSize) {
+    for (let i = 0; questions.length < batchSize && i < pool.length; i += 1) {
+      const question = pool[(start + i) % pool.length];
+      const stem = getWhoMoreLikelyStem(question);
+      if (!usedStems.has(stem)) {
+        usedStems.add(stem);
+        questions.push(question);
+      }
+    }
+  }
+
+  return questions.length ? questions : [pool[start % pool.length]];
 }
 
 export function getTodayWhoMoreLikelyQuestion() {
